@@ -44,35 +44,35 @@ const BASE_STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
   ::-webkit-scrollbar { width: 4px; height: 4px; }
-  ::-webkit-scrollbar-track { background: #1a1d26; }
-  ::-webkit-scrollbar-thumb { background: #2d3247; border-radius: 4px; }
-  input, select, textarea { font-family: inherit; color: #e2e8f0; background: #1a1d26; border: 1px solid #2d3247; border-radius: 8px; padding: 10px 14px; font-size: 15px; outline: none; transition: border-color 0.15s; }
-  input:focus, select:focus, textarea:focus { border-color: #6366f1; }
+  ::-webkit-scrollbar-track { background: #f1f5f9; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  input, select, textarea { font-family: inherit; color: #1e293b; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; font-size: 15px; outline: none; transition: border-color 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color: #6366f1; box-shadow: 0 0 0 3px #6366f115; }
   button { cursor: pointer; font-family: inherit; }
   .pill { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 99px; font-size: 13px; font-weight: 600; letter-spacing: 0.3px; }
   .btn { border: none; border-radius: 8px; padding: 10px 18px; font-size: 15px; font-weight: 500; transition: all 0.15s; }
   .btn-primary { background: #6366f1; color: #fff; } .btn-primary:hover { background: #5558e8; }
-  .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #2d3247; } .btn-ghost:hover { background: #1a1d26; color: #e2e8f0; }
+  .btn-ghost { background: transparent; color: #64748b; border: 1px solid #e2e8f0; } .btn-ghost:hover { background: #f8fafc; color: #1e293b; }
   .btn-green { background: #10b981; color: #fff; } .btn-green:hover { background: #059669; }
   .btn-red { background: #ef4444; color: #fff; } .btn-red:hover { background: #dc2626; }
-  .card { background: #161921; border: 1px solid #1f2330; border-radius: 12px; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
   .nav-item { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 8px; font-size: 15px; font-weight: 500; color: #64748b; cursor: pointer; transition: all 0.15s; border: none; background: none; width: 100%; text-align: left; }
-  .nav-item:hover { background: #1a1d26; color: #e2e8f0; }
-  .nav-item.active { background: #1e2133; color: #e2e8f0; }
+  .nav-item:hover { background: #f1f5f9; color: #1e293b; }
+  .nav-item.active { background: #ede9fe; color: #6366f1; }
   .tab { padding: 7px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; border: none; background: transparent; color: #64748b; cursor: pointer; transition: all 0.15s; }
-  .tab.active { background: #1e2133; color: #e2e8f0; }
-  .score-bar-bg { background: #1f2330; border-radius: 99px; height: 7px; overflow: hidden; }
+  .tab.active { background: #fff; color: #6366f1; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .score-bar-bg { background: #e2e8f0; border-radius: 99px; height: 7px; overflow: hidden; }
   .score-bar-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
-  .wa-bubble-out { background: #1e3a2f; border-radius: 12px 2px 12px 12px; padding: 12px 16px; max-width: 85%; margin-left: auto; }
-  .wa-bubble-in { background: #1e2133; border-radius: 2px 12px 12px 12px; padding: 12px 16px; max-width: 85%; }
+  .wa-bubble-out { background: #dcfce7; border-radius: 12px 2px 12px 12px; padding: 12px 16px; max-width: 85%; margin-left: auto; }
+  .wa-bubble-in { background: #f1f5f9; border-radius: 2px 12px 12px 12px; padding: 12px 16px; max-width: 85%; }
   .fade-in { animation: fadeIn 0.2s ease; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
-  .modal { background: #161921; border: 1px solid #2d3247; border-radius: 16px; padding: 28px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
-  .stat-card { background: #161921; border: 1px solid #1f2330; border-radius: 12px; padding: 20px 22px; }
-  tr:hover td { background: #1a1d26; }
-  .sort-btn { background: none; border: none; color: #64748b; cursor: pointer; font-size: 13px; margin-left: 4px; }
+  .overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.4); z-index: 100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .modal { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 28px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.12); }
+  .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+  tr:hover td { background: #f8fafc; }
+  .sort-btn { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 13px; margin-left: 4px; }
 `;
 
 // ─── ROOT ──────────────────────────────────────────────────────────────────────
@@ -105,7 +105,7 @@ function LoginScreen({ onLogin }) {
   const handleKeyDown = (i, e) => { if (e.key === "Backspace" && !pin[i] && i > 0) document.getElementById(`pin-${i-1}`)?.focus(); };
 
   return (
-    <div style={{ fontFamily: "'DM Sans','Helvetica Neue',sans-serif", background: "#0d0f14", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#e2e8f0" }}>
+    <div style={{ fontFamily: "'DM Sans','Helvetica Neue',sans-serif", background: "#f8fafc", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#1e293b" }}>
       <style>{BASE_STYLES}</style>
       <div className="fade-in" style={{ width: 380, textAlign: "center" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 40 }}>
@@ -119,18 +119,18 @@ function LoginScreen({ onLogin }) {
             {[0,1,2,3].map(i => (
               <input key={i} id={`pin-${i}`} type="password" inputMode="numeric" maxLength={1} value={pin[i]}
                 onChange={e => handleChange(i, e.target.value)} onKeyDown={e => handleKeyDown(i, e)} autoFocus={i === 0}
-                style={{ width: 56, height: 64, textAlign: "center", fontSize: 28, fontFamily: "DM Mono,monospace", borderRadius: 10, border: `2px solid ${error ? "#ef4444" : "#2d3247"}`, background: "#111318", color: "#e2e8f0", padding: 0 }} />
+                style={{ width: 56, height: 64, textAlign: "center", fontSize: 28, fontFamily: "DM Mono,monospace", borderRadius: 10, border: `2px solid ${error ? "#ef4444" : "#e2e8f0"}`, background: "#f8fafc", color: "#1e293b", padding: 0 }} />
             ))}
           </div>
           {error && <div style={{ color: "#ef4444", fontSize: 14, marginBottom: 8 }}>{error}</div>}
           <div style={{ fontSize: 13, color: "#475569" }}>Each team member has a unique PIN</div>
         </div>
         {/* Demo hint card */}
-        <div style={{ background: "#161921", border: "1px solid #1f2330", borderRadius: 12, padding: 16, textAlign: "left" }}>
+        <div style={{ background: "#fff", border: "1px solid #1f2330", borderRadius: 12, padding: 16, textAlign: "left" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 10, letterSpacing: 1 }}>DEMO PINS</div>
           {USERS.map(u => (
             <div key={u.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #1a1d26" }}>
-              <span style={{ fontSize: 14, color: "#94a3b8" }}>{u.name}</span>
+              <span style={{ fontSize: 14, color: "#64748b" }}>{u.name}</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontFamily: "DM Mono,monospace", fontSize: 14, color: "#6366f1", fontWeight: 600 }}>{u.pin}</span>
                 <span className="pill" style={{ background: u.role === "admin" ? "#6366f122" : "#10b98122", color: u.role === "admin" ? "#818cf8" : "#10b981", fontSize: 11 }}>{u.role}</span>
@@ -209,7 +209,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "#111318", padding: 4, borderRadius: 10, width: "fit-content" }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 20, background: "#f8fafc", padding: 4, borderRadius: 10, width: "fit-content" }}>
         {tabs.map(([t,label]) => <button key={t} className={`tab ${activeTab===t?"active":""}`} onClick={() => setActiveTab(t)}>{label}</button>)}
       </div>
 
@@ -219,7 +219,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
           <div className="card" style={{ padding: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 14 }}>CONTACT INFO</div>
             {[["Full Name",c.name],["Email",c.email],["Phone",c.phone],["Company",c.company],["Source",c.source]].map(([k,v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #1f2330", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#e2e8f0", fontWeight: 500 }}>{v||"—"}</span></div>
+              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #1f2330", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#1e293b", fontWeight: 500 }}>{v||"—"}</span></div>
             ))}
             {isAdmin && (
               <div style={{ marginTop: 14 }}>
@@ -231,7 +231,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
           <div className="card" style={{ padding: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 14 }}>LEAD DETAILS</div>
             {[["Budget",c.budget],["Timeline",c.timeline],["Decision Maker",c.isDecisionMaker?"✅ Yes":"❌ No"],["Interest","⭐".repeat(c.interestLevel)]].map(([k,v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #1f2330", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#e2e8f0", fontWeight: 500 }}>{v||"—"}</span></div>
+              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #1f2330", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#1e293b", fontWeight: 500 }}>{v||"—"}</span></div>
             ))}
             <div style={{ marginTop: 14 }}>
               <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>UPDATE STATUS</div>
@@ -240,7 +240,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
           </div>
           <div className="card" style={{ padding: 20, gridColumn: "span 2" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 10 }}>NOTES</div>
-            <textarea value={c.notes} onChange={e => updateContact(c.id, { notes: e.target.value })} style={{ width: "100%", minHeight: 100, resize: "vertical", background: "#111318" }} placeholder="Add notes…" />
+            <textarea value={c.notes} onChange={e => updateContact(c.id, { notes: e.target.value })} style={{ width: "100%", minHeight: 100, resize: "vertical", background: "#f8fafc" }} placeholder="Add notes…" />
           </div>
         </div>
       )}
@@ -257,7 +257,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 12 }}>SCORE BREAKDOWN</div>
             {Object.entries(c.scoreBreakdown).map(([k,v]) => (
               <div key={k} style={{ marginBottom: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4 }}><span style={{ color: "#94a3b8", textTransform: "capitalize" }}>{k.replace(/([A-Z])/g," $1")}</span><span style={{ color: v<0?"#ef4444":"#e2e8f0", fontWeight: 600 }}>{v>0?"+":""}{v}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4 }}><span style={{ color: "#64748b", textTransform: "capitalize" }}>{k.replace(/([A-Z])/g," $1")}</span><span style={{ color: v<0?"#ef4444":"#1e293b", fontWeight: 600 }}>{v>0?"+":""}{v}</span></div>
                 <div className="score-bar-bg"><div className="score-bar-fill" style={{ width: `${Math.max(0,(v/25)*100)}%`, background: v<0?"#ef4444":"#6366f1" }} /></div>
               </div>
             ))}
@@ -266,13 +266,13 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 16 }}>EDIT SCORING FACTORS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div>
-                <label style={{ fontSize: 14, color: "#94a3b8" }}>Interest Level (1–5)</label>
+                <label style={{ fontSize: 14, color: "#64748b" }}>Interest Level (1–5)</label>
                 <input type="range" min={1} max={5} value={c.interestLevel} onChange={e => updateContact(c.id, { interestLevel: +e.target.value })} style={{ width: "100%", marginTop: 6, background: "transparent" }} />
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#64748b" }}><span>Cold</span><span style={{ color: "#f59e0b" }}>{"⭐".repeat(c.interestLevel)}</span><span>Hot</span></div>
               </div>
-              <div><label style={{ fontSize: 14, color: "#94a3b8", display: "block", marginBottom: 6 }}>Budget</label><select value={c.budget} onChange={e => updateContact(c.id, { budget: e.target.value })} style={{ width: "100%" }}>{BUDGET_OPTIONS.map(b => <option key={b}>{b}</option>)}</select></div>
-              <div><label style={{ fontSize: 14, color: "#94a3b8", display: "block", marginBottom: 6 }}>Timeline</label><select value={c.timeline} onChange={e => updateContact(c.id, { timeline: e.target.value })} style={{ width: "100%" }}>{TIMELINE_OPTIONS.map(t => <option key={t}>{t}</option>)}</select></div>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 15 }}><input type="checkbox" checked={c.isDecisionMaker} onChange={e => updateContact(c.id, { isDecisionMaker: e.target.checked })} style={{ width: 16, height: 16 }} /><span style={{ color: "#94a3b8" }}>Is Decision Maker</span></label>
+              <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Budget</label><select value={c.budget} onChange={e => updateContact(c.id, { budget: e.target.value })} style={{ width: "100%" }}>{BUDGET_OPTIONS.map(b => <option key={b}>{b}</option>)}</select></div>
+              <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Timeline</label><select value={c.timeline} onChange={e => updateContact(c.id, { timeline: e.target.value })} style={{ width: "100%" }}>{TIMELINE_OPTIONS.map(t => <option key={t}>{t}</option>)}</select></div>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 15 }}><input type="checkbox" checked={c.isDecisionMaker} onChange={e => updateContact(c.id, { isDecisionMaker: e.target.checked })} style={{ width: 16, height: 16 }} /><span style={{ color: "#64748b" }}>Is Decision Maker</span></label>
               <button className="btn btn-primary" onClick={() => {
                 const bs={"Under 10k":5,"10k-50k":10,"50k-100k":15,"100k-500k":25,"500k+":25}[c.budget]||10;
                 const ts={"1 month":25,"1-3 months":20,"3-6 months":12,"6+ months":4,"Unknown":2}[c.timeline]||5;
@@ -292,22 +292,22 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
           <div className="card" style={{ padding: 24 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 16 }}>CALL DETAILS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div><label style={{ fontSize: 14, color: "#94a3b8", display: "block", marginBottom: 6 }}>Call Date</label><input type="date" value={c.callDate||""} onChange={e => updateContact(c.id,{callDate:e.target.value})} style={{ width: "100%" }} /></div>
+              <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Call Date</label><input type="date" value={c.callDate||""} onChange={e => updateContact(c.id,{callDate:e.target.value})} style={{ width: "100%" }} /></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div><label style={{ fontSize: 14, color: "#94a3b8", display: "block", marginBottom: 6 }}>Time</label><input type="time" value={c.callTime||""} onChange={e => updateContact(c.id,{callTime:e.target.value})} style={{ width: "100%" }} /></div>
-                <div><label style={{ fontSize: 14, color: "#94a3b8", display: "block", marginBottom: 6 }}>Timezone</label><input value={c.timezone||""} onChange={e => updateContact(c.id,{timezone:e.target.value})} placeholder="EST" style={{ width: "100%" }} /></div>
+                <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Time</label><input type="time" value={c.callTime||""} onChange={e => updateContact(c.id,{callTime:e.target.value})} style={{ width: "100%" }} /></div>
+                <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Timezone</label><input value={c.timezone||""} onChange={e => updateContact(c.id,{timezone:e.target.value})} placeholder="EST" style={{ width: "100%" }} /></div>
               </div>
-              <div><label style={{ fontSize: 14, color: "#94a3b8", display: "block", marginBottom: 6 }}>Meeting Link</label><input value={c.meetingLink||""} onChange={e => updateContact(c.id,{meetingLink:e.target.value})} placeholder="https://cal.com/…" style={{ width: "100%" }} /></div>
+              <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Meeting Link</label><input value={c.meetingLink||""} onChange={e => updateContact(c.id,{meetingLink:e.target.value})} placeholder="https://cal.com/…" style={{ width: "100%" }} /></div>
             </div>
           </div>
           <div className="card" style={{ padding: 24 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 16 }}>CALL STATUS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {[["booked","✅ Booked","#10b981"],["rescheduled","🔄 Rescheduled","#f59e0b"],["canceled","❌ Canceled","#ef4444"],["completed","🎉 Completed","#6366f1"],["no-show","⚠️ No Show","#f97316"]].map(([val,label,color]) => (
-                <button key={val} onClick={() => handleCallStatusChange(val)} style={{ border:`2px solid ${c.callStatus===val?color:"#2d3247"}`, background:c.callStatus===val?color+"22":"transparent", color:c.callStatus===val?color:"#64748b", borderRadius:8, padding:"11px 14px", textAlign:"left", fontSize:15, fontWeight:500, transition:"all 0.15s" }}>{label}{c.callStatus===val&&" ← current"}</button>
+                <button key={val} onClick={() => handleCallStatusChange(val)} style={{ border:`2px solid ${c.callStatus===val?color:"#1e293b"}`, background:c.callStatus===val?color+"22":"transparent", color:c.callStatus===val?color:"#64748b", borderRadius:8, padding:"11px 14px", textAlign:"left", fontSize:15, fontWeight:500, transition:"all 0.15s" }}>{label}{c.callStatus===val&&" ← current"}</button>
               ))}
             </div>
-            <div style={{ marginTop: 16 }}><label style={{ fontSize: 14, color: "#94a3b8", display: "block", marginBottom: 6 }}>Call Notes</label><textarea value={c.callNotes||""} onChange={e => updateContact(c.id,{callNotes:e.target.value})} style={{ width: "100%", minHeight: 80, resize: "none", background: "#111318" }} /></div>
+            <div style={{ marginTop: 16 }}><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Call Notes</label><textarea value={c.callNotes||""} onChange={e => updateContact(c.id,{callNotes:e.target.value})} style={{ width: "100%", minHeight: 80, resize: "none", background: "#f8fafc" }} /></div>
           </div>
         </div>
       )}
@@ -320,7 +320,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
               <div style={{ width: 36, height: 36, background: "#25d366", borderRadius: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>💬</div>
               <div><div style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</div><div style={{ fontSize: 11, color: "#64748b" }}>{c.phone}</div></div>
             </div>
-            <div style={{ padding: 16, minHeight: 300, maxHeight: 400, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, background: "#0d1117" }}>
+            <div style={{ padding: 16, minHeight: 300, maxHeight: 400, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, background: "#f0fdf4" }}>
               {c.whatsappHistory.length===0 ? <div style={{ color: "#64748b", fontSize: 13, textAlign: "center", marginTop: 60 }}>No messages yet.</div> : c.whatsappHistory.map(w => (
                 <div key={w.id} style={{ display: "flex", flexDirection: "column", alignItems: w.dir==="out"?"flex-end":"flex-start" }}>
                   <div className={w.dir==="out"?"wa-bubble-out":"wa-bubble-in"} style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{w.msg}</div>
@@ -329,7 +329,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
               ))}
             </div>
             <div style={{ padding: 16, borderTop: "1px solid #1f2330" }}>
-              <textarea value={waMessage} onChange={e => setWaMessage(e.target.value)} placeholder="Type a message…" style={{ width: "100%", minHeight: 70, resize: "none", marginBottom: 10, background: "#111318" }} />
+              <textarea value={waMessage} onChange={e => setWaMessage(e.target.value)} placeholder="Type a message…" style={{ width: "100%", minHeight: 70, resize: "none", marginBottom: 10, background: "#f8fafc" }} />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
                 <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setWaMessage("")}>Clear</button>
                 <button className="btn btn-green" style={{ fontSize: 12 }} onClick={() => { if (waMessage.trim()) { sendWhatsApp(c, waMessage); setWaMessage(""); } }}>Send ✓</button>
@@ -339,7 +339,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
           <div className="card" style={{ padding: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 14 }}>TEMPLATES</div>
             {Object.entries(WA_TEMPLATES).map(([key,tpl]) => (
-              <button key={key} onClick={() => setWaMessage(fillTemplate(tpl,c))} style={{ display: "block", width: "100%", textAlign: "left", background: "#111318", border: "1px solid #2d3247", borderRadius: 8, padding: "10px 14px", fontSize: 14, color: "#94a3b8", marginBottom: 8, cursor: "pointer" }}>
+              <button key={key} onClick={() => setWaMessage(fillTemplate(tpl,c))} style={{ display: "block", width: "100%", textAlign: "left", background: "#f8fafc", border: "1px solid #2d3247", borderRadius: 8, padding: "10px 14px", fontSize: 14, color: "#64748b", marginBottom: 8, cursor: "pointer" }}>
                 📋 {key.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase())}
               </button>
             ))}
@@ -355,8 +355,8 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
             <p style={{ fontSize: 14, color: "#64748b", marginBottom: 20, lineHeight: 1.6 }}>Get AI suggestions for scoring, next actions, and message drafts.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {[["score","🎯 Suggest Lead Score","Get an AI-suggested score"],["action","⚡ Best Next Action","What to do next"],["summary","📝 Summarise Notes","Clean summary of notes"],["whatsapp","💬 Draft WhatsApp","Draft a personalised message"]].map(([type,label,desc]) => (
-                <button key={type} onClick={() => getAI(type)} style={{ background: "#111318", border: "1px solid #2d3247", borderRadius: 10, padding: "13px 16px", textAlign: "left", cursor: "pointer" }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "#e2e8f0" }}>{label}</div>
+                <button key={type} onClick={() => getAI(type)} style={{ background: "#f8fafc", border: "1px solid #2d3247", borderRadius: 10, padding: "13px 16px", textAlign: "left", cursor: "pointer" }}>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: "#1e293b" }}>{label}</div>
                   <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>{desc}</div>
                 </button>
               ))}
@@ -368,7 +368,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
               ? <div style={{ textAlign: "center", padding: 40, color: "#6366f1" }}><div style={{ fontSize: 32 }}>✨</div><div style={{ fontSize: 15, marginTop: 12 }}>Thinking…</div></div>
               : aiSuggestion
                 ? <div>
-                    <div style={{ background: "#111318", border: "1px solid #2d3247", borderRadius: 10, padding: 16, fontSize: 15, lineHeight: 1.7, color: "#e2e8f0", whiteSpace: "pre-wrap", marginBottom: 14 }}>{aiSuggestion}</div>
+                    <div style={{ background: "#f8fafc", border: "1px solid #2d3247", borderRadius: 10, padding: 16, fontSize: 15, lineHeight: 1.7, color: "#1e293b", whiteSpace: "pre-wrap", marginBottom: 14 }}>{aiSuggestion}</div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button className="btn btn-primary" style={{ fontSize: 12 }} onClick={() => { navigator.clipboard.writeText(aiSuggestion); notify("Copied!"); }}>Copy</button>
                       <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setWaMessage(aiSuggestion); setActiveTab("whatsapp"); }}>Use as WA</button>
@@ -401,7 +401,7 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
             ))}
           </div>
         </div>
-        <textarea value={waMessage} onChange={e => setWaMessage(e.target.value)} style={{ width: "100%", minHeight: 120, resize: "vertical", marginBottom: 14, background: "#111318" }} placeholder="Type your message…" />
+        <textarea value={waMessage} onChange={e => setWaMessage(e.target.value)} style={{ width: "100%", minHeight: 120, resize: "vertical", marginBottom: 14, background: "#f8fafc" }} placeholder="Type your message…" />
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-green" onClick={() => { if (waMessage.trim()) { onSend(); onClose(); } }}>Send Message ✓</button>
@@ -456,7 +456,7 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
   if (view==="contacts" && selectedContact) {
     const c = contacts.find(x=>x.id===selectedContact.id) || selectedContact;
     return (
-      <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:"#0d0f14", minHeight:"100vh", color:"#e2e8f0", fontSize:15 }}>
+      <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:"#f8fafc", minHeight:"100vh", color:"#1e293b", fontSize:15 }}>
         <style>{BASE_STYLES}</style>
         <ContactDetail c={c} contacts={contacts} updateContact={updateContact} sendWhatsApp={sendWhatsApp}
           onBack={() => setSelectedContact(null)} isAdmin={true}
@@ -467,17 +467,17 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
   }
 
   return (
-    <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:"#0d0f14", minHeight:"100vh", color:"#e2e8f0", display:"flex", fontSize:15 }}>
+    <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:"#f8fafc", minHeight:"100vh", color:"#1e293b", display:"flex", fontSize:15 }}>
       <style>{BASE_STYLES}</style>
       {NotificationEl}
 
       {/* SIDEBAR */}
-      <div style={{ width:220, background:"#111318", borderRight:"1px solid #1f2330", display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", flexShrink:0 }}>
+      <div style={{ width:220, background:"#f8fafc", borderRight:"1px solid #1f2330", display:"flex", flexDirection:"column", position:"sticky", top:0, height:"100vh", flexShrink:0 }}>
         <div style={{ padding:"20px 16px 16px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:24 }}>
             <div style={{ width:32, height:32, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700 }}>C</div>
             <div>
-              <div style={{ fontSize:15, fontWeight:700, color:"#e2e8f0" }}>ClearCRM</div>
+              <div style={{ fontSize:15, fontWeight:700, color:"#1e293b" }}>ClearCRM</div>
               <div style={{ fontSize:11, color:"#6366f1", fontWeight:700, letterSpacing:0.5 }}>SUPER ADMIN</div>
             </div>
           </div>
@@ -487,11 +487,11 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
             ))}
           </div>
         </div>
-        <div style={{ marginTop:"auto", padding:16, borderTop:"1px solid #1f2330" }}>
+        <div style={{ marginTop:"auto", padding:16, borderTop:"1px solid #f1f5f9" }}>
           <div style={{ fontSize:12, color:"#64748b", marginBottom:8 }}>Quick Stats</div>
           <div style={{ display:"flex", gap:8, marginBottom:14 }}>
             {[["A","#10b981"],["B","#3b82f6"],["C","#f59e0b"]].map(([cat,color]) => (
-              <div key={cat} style={{ flex:1, background:"#161921", borderRadius:8, padding:"6px 8px", textAlign:"center" }}>
+              <div key={cat} style={{ flex:1, background:"#fff", borderRadius:8, padding:"6px 8px", textAlign:"center" }}>
                 <div style={{ fontSize:16, fontWeight:700, color }}>{contacts.filter(c=>c.category===cat).length}</div>
                 <div style={{ fontSize:12, color:"#64748b" }}>Cat {cat}</div>
               </div>
@@ -518,39 +518,39 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
               <div className="card" style={{ padding:20 }}>
-                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#94a3b8" }}>📞 TODAY'S CALLS</div>
+                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>📞 TODAY'S CALLS</div>
                 {todaysCalls.length===0 ? <div style={{ color:"#64748b", fontSize:14 }}>No calls today.</div> : todaysCalls.map(c => (
-                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid #1f2330", cursor:"pointer" }} onClick={() => goToContact(c)}>
-                    <div style={{ width:40, height:40, background:"#1e2133", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>{c.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
+                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
+                    <div style={{ width:40, height:40, background:"#0f172a", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>{c.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
                     <div style={{ flex:1 }}><div style={{ fontSize:15, fontWeight:600 }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.callTime} {c.timezone} · {c.company}</div></div>
-                    <span className="pill" style={{ background:"#1e3a2f", color:"#10b981" }}>Booked</span>
+                    <span className="pill" style={{ background:"#dcfce7", color:"#10b981" }}>Booked</span>
                   </div>
                 ))}
               </div>
               <div className="card" style={{ padding:20 }}>
-                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#94a3b8" }}>🔥 TOP PRIORITY LEADS</div>
+                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>🔥 TOP PRIORITY LEADS</div>
                 {topLeads.map(c => (
-                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:"1px solid #1f2330", cursor:"pointer" }} onClick={() => goToContact(c)}>
-                    <div style={{ width:36, height:36, background:"linear-gradient(135deg,#1e2133,#2d3247)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:"#6366f1" }}>{c.score}</div>
+                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
+                    <div style={{ width:36, height:36, background:"linear-gradient(135deg,#ede9fe,#e0e7ff)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:"#6366f1" }}>{c.score}</div>
                     <div style={{ flex:1 }}><div style={{ fontSize:15, fontWeight:600 }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.company} · {c.budget}</div></div>
                     <span className="pill" style={{ background:categoryColor(c.category)+"22", color:categoryColor(c.category) }}>Cat {c.category}</span>
                   </div>
                 ))}
               </div>
               <div className="card" style={{ padding:20 }}>
-                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#94a3b8" }}>⚠️ NO-SHOW FOLLOW-UPS</div>
+                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>⚠️ NO-SHOW FOLLOW-UPS</div>
                 {noShows.length===0 ? <div style={{ color:"#64748b", fontSize:14 }}>All clear!</div> : noShows.map(c => (
-                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:"1px solid #1f2330" }}>
+                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:"1px solid #f1f5f9" }}>
                     <div style={{ flex:1 }}><div style={{ fontSize:15, fontWeight:600 }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.callDate} · {c.assignedTo}</div></div>
                     <button className="btn btn-ghost" style={{ fontSize:13, padding:"6px 12px" }} onClick={() => { setShowWAModal(c); setWaMessage(fillTemplate(WA_TEMPLATES.no_show,c)); }}>Send WA</button>
                   </div>
                 ))}
               </div>
               <div className="card" style={{ padding:20 }}>
-                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#94a3b8" }}>💬 RECENT WHATSAPP</div>
+                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>💬 RECENT WHATSAPP</div>
                 {recentWA.length===0 ? <div style={{ color:"#64748b", fontSize:14 }}>No messages yet.</div> : recentWA.map(w => (
-                  <div key={w.id+w.contactId} style={{ padding:"8px 0", borderBottom:"1px solid #1f2330" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontSize:14, fontWeight:600, color:"#94a3b8" }}>{w.contactName}</span><span className="pill" style={{ background:w.status==="read"?"#1e3a2f":"#1e2133", color:w.status==="read"?"#10b981":"#64748b" }}>{w.status}</span></div>
+                  <div key={w.id+w.contactId} style={{ padding:"8px 0", borderBottom:"1px solid #f1f5f9" }}>
+                    <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontSize:14, fontWeight:600, color:"#64748b" }}>{w.contactName}</span><span className="pill" style={{ background:w.status==="read"?"#dcfce7":"#0f172a", color:w.status==="read"?"#10b981":"#64748b" }}>{w.status}</span></div>
                     <div style={{ fontSize:13, color:"#64748b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{w.msg}</div>
                   </div>
                 ))}
@@ -577,7 +577,7 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
             </div>
             <div className="card" style={{ overflow:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse", fontSize:15 }}>
-                <thead><tr style={{ borderBottom:"1px solid #1f2330" }}>
+                <thead><tr style={{ borderBottom:"1px solid #f1f5f9" }}>
                   {[["name","Name"],["company","Company"],["score","Score"],["category","Cat"],["leadStatus","Status"],["assignedTo","Agent"],["","Actions"]].map(([f,l]) => (
                     <th key={l} style={{ padding:"12px 16px", textAlign:"left", fontSize:13, fontWeight:600, color:"#64748b", whiteSpace:"nowrap" }}>
                       {l}{f&&<button className="sort-btn" onClick={()=>{setSortField(f);setSortDir(d=>d==="asc"?"desc":"asc");}}>{sortField===f?(sortDir==="asc"?"▲":"▼"):"⇅"}</button>}
@@ -585,9 +585,9 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
                   ))}
                 </tr></thead>
                 <tbody>{filtered.map(c => (
-                  <tr key={c.id} style={{ borderBottom:"1px solid #1a1d24", cursor:"pointer" }} onClick={() => goToContact(c)}>
-                    <td style={{ padding:"12px 16px" }}><div style={{ fontWeight:600, color:"#f1f5f9" }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.email}</div></td>
-                    <td style={{ padding:"12px 16px", color:"#94a3b8" }}>{c.company}</td>
+                  <tr key={c.id} style={{ borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
+                    <td style={{ padding:"12px 16px" }}><div style={{ fontWeight:600, color:"#0f172a" }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.email}</div></td>
+                    <td style={{ padding:"12px 16px", color:"#64748b" }}>{c.company}</td>
                     <td style={{ padding:"12px 16px" }}><div style={{ display:"flex", alignItems:"center", gap:8 }}><div className="score-bar-bg" style={{ width:52 }}><div className="score-bar-fill" style={{ width:`${c.score}%`, background:scoreColor(c.score) }} /></div><span style={{ color:scoreColor(c.score), fontWeight:700, fontFamily:"DM Mono,monospace", fontSize:14 }}>{c.score}</span></div></td>
                     <td style={{ padding:"12px 16px" }}><span className="pill" style={{ background:categoryColor(c.category)+"22", color:categoryColor(c.category) }}>{c.category}</span></td>
                     <td style={{ padding:"12px 16px" }}><span className="pill" style={{ background:statusColor(c.leadStatus)+"22", color:statusColor(c.leadStatus) }}>{c.leadStatus}</span></td>
@@ -613,13 +613,13 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
               {WORKFLOW_STAGES.map(stage => {
                 const sc = contacts.filter(c=>c.leadStatus===stage);
                 return (
-                  <div key={stage} style={{ minWidth:220, background:"#111318", border:"1px solid #1f2330", borderRadius:12, padding:16 }}>
+                  <div key={stage} style={{ minWidth:220, background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:12, padding:16 }}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
                       <div style={{ fontSize:13, fontWeight:600, color:"#64748b" }}>{stage.toUpperCase()}</div>
                       <span className="pill" style={{ background:statusColor(stage)+"22", color:statusColor(stage) }}>{sc.length}</span>
                     </div>
                     {sc.map(c => (
-                      <div key={c.id} style={{ background:"#161921", border:"1px solid #1f2330", borderRadius:8, padding:12, cursor:"pointer", marginBottom:10 }} onClick={() => goToContact(c)}>
+                      <div key={c.id} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, padding:12, cursor:"pointer", marginBottom:10 }} onClick={() => goToContact(c)}>
                         <div style={{ fontSize:15, fontWeight:600, marginBottom:4 }}>{c.name}</div>
                         <div style={{ fontSize:13, color:"#64748b", marginBottom:6 }}>{c.company}</div>
                         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -645,7 +645,7 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
                 {contacts.filter(c=>c.whatsappHistory.length>0).map(c => {
                   const last = c.whatsappHistory[c.whatsappHistory.length-1];
                   return (
-                    <div key={c.id} style={{ display:"flex", gap:12, padding:"12px 0", borderBottom:"1px solid #1f2330", cursor:"pointer" }} onClick={() => goToContact(c)}>
+                    <div key={c.id} style={{ display:"flex", gap:12, padding:"12px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
                       <div style={{ width:44, height:44, background:"#25d366", borderRadius:50, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>💬</div>
                       <div style={{ flex:1, overflow:"hidden" }}>
                         <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontSize:15, fontWeight:600 }}>{c.name}</span><span style={{ fontSize:12, color:"#64748b" }}>{last.time.split(" ")[0]}</span></div>
@@ -659,9 +659,9 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
               <div className="card" style={{ padding:20 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:"#64748b", marginBottom:14 }}>MESSAGE TEMPLATES</div>
                 {Object.entries(WA_TEMPLATES).map(([key,tpl]) => (
-                  <div key={key} style={{ background:"#111318", border:"1px solid #1f2330", borderRadius:10, padding:14, marginBottom:12 }}>
+                  <div key={key} style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:14, marginBottom:12 }}>
                     <div style={{ fontSize:14, fontWeight:600, color:"#6366f1", marginBottom:6 }}>{key.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase())}</div>
-                    <div style={{ fontSize:14, color:"#94a3b8", lineHeight:1.6, whiteSpace:"pre-wrap" }}>{tpl}</div>
+                    <div style={{ fontSize:14, color:"#64748b", lineHeight:1.6, whiteSpace:"pre-wrap" }}>{tpl}</div>
                   </div>
                 ))}
               </div>
@@ -692,7 +692,7 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
                     </div>
                     <div style={{ display:"flex", gap:8, marginBottom:12 }}>
                       {["A","B","C","D"].map(cat => (
-                        <div key={cat} style={{ flex:1, background:"#111318", borderRadius:8, padding:"8px 6px", textAlign:"center" }}>
+                        <div key={cat} style={{ flex:1, background:"#f8fafc", borderRadius:8, padding:"8px 6px", textAlign:"center" }}>
                           <div style={{ fontSize:18, fontWeight:700, color:categoryColor(cat) }}>{leads.filter(c=>c.category===cat).length}</div>
                           <div style={{ fontSize:11, color:"#64748b" }}>Cat {cat}</div>
                         </div>
@@ -730,8 +730,8 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
               <div className="card" style={{ padding:24 }}>
                 <div style={{ fontSize:15, fontWeight:600, marginBottom:16 }}>WhatsApp Business API</div>
                 <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-                  <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:6 }}>Phone Number ID</label><input placeholder="Enter WA Business phone ID" style={{ width:"100%" }} /></div>
-                  <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:6 }}>Access Token</label><input type="password" placeholder="••••••••••••" style={{ width:"100%" }} /></div>
+                  <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:6 }}>Phone Number ID</label><input placeholder="Enter WA Business phone ID" style={{ width:"100%" }} /></div>
+                  <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:6 }}>Access Token</label><input type="password" placeholder="••••••••••••" style={{ width:"100%" }} /></div>
                   <button className="btn btn-primary" onClick={()=>notify("Settings saved!")}>Save API Settings</button>
                 </div>
               </div>
@@ -739,8 +739,8 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
                 <div style={{ fontSize:15, fontWeight:600, marginBottom:16 }}>Scoring Rules</div>
                 <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
                   {[["Budget 500k+","+25"],["Decision Maker","+15"],["Timeline < 1mo","+25"],["High Interest (5★)","+20"],["WA Engagement","+15"],["Low Budget","+5"]].map(([k,v]) => (
-                    <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"8px 12px", background:"#111318", border:"1px solid #1f2330", borderRadius:8, fontSize:14 }}>
-                      <span style={{ color:"#94a3b8" }}>{k}</span><span style={{ color:"#6366f1", fontWeight:700 }}>{v}</span>
+                    <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"8px 12px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, fontSize:14 }}>
+                      <span style={{ color:"#64748b" }}>{k}</span><span style={{ color:"#6366f1", fontWeight:700 }}>{v}</span>
                     </div>
                   ))}
                 </div>
@@ -801,11 +801,11 @@ function AgentApp({ user, contacts, setContacts, onLogout }) {
   if (selectedContact) {
     const c = contacts.find(x=>x.id===selectedContact.id) || selectedContact;
     return (
-      <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:"#0d0f14", minHeight:"100vh", color:"#e2e8f0", fontSize:15 }}>
+      <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:"#f8fafc", minHeight:"100vh", color:"#1e293b", fontSize:15 }}>
         <style>{BASE_STYLES}</style>
         {NotificationEl}
         {/* Agent top bar */}
-        <div style={{ background:"#111318", borderBottom:"1px solid #1f2330", padding:"12px 24px", display:"flex", alignItems:"center", gap:12 }}>
+        <div style={{ background:"#f8fafc", borderBottom:"1px solid #f1f5f9", padding:"12px 24px", display:"flex", alignItems:"center", gap:12 }}>
           <div style={{ width:28, height:28, background:"linear-gradient(135deg,#10b981,#059669)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700 }}>{user.name[0]}</div>
           <span style={{ fontSize:14, fontWeight:600, color:"#10b981" }}>{user.name}</span>
           <span style={{ fontSize:13, color:"#475569" }}>Agent View</span>
@@ -819,12 +819,12 @@ function AgentApp({ user, contacts, setContacts, onLogout }) {
   }
 
   return (
-    <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:"#0d0f14", minHeight:"100vh", color:"#e2e8f0", fontSize:15 }}>
+    <div style={{ fontFamily:"'DM Sans','Helvetica Neue',sans-serif", background:"#f8fafc", minHeight:"100vh", color:"#1e293b", fontSize:15 }}>
       <style>{BASE_STYLES}</style>
       {NotificationEl}
 
       {/* Agent top bar */}
-      <div style={{ background:"#111318", borderBottom:"1px solid #1f2330", padding:"14px 28px", display:"flex", alignItems:"center", gap:14 }}>
+      <div style={{ background:"#f8fafc", borderBottom:"1px solid #f1f5f9", padding:"14px 28px", display:"flex", alignItems:"center", gap:14 }}>
         <div style={{ width:34, height:34, background:"linear-gradient(135deg,#10b981,#059669)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700 }}>{user.name[0]}</div>
         <div>
           <div style={{ fontSize:15, fontWeight:700 }}>{user.name}</div>
@@ -844,13 +844,13 @@ function AgentApp({ user, contacts, setContacts, onLogout }) {
       <div style={{ padding:28 }}>
         {/* Alerts */}
         {todaysCalls.length > 0 && (
-          <div style={{ background:"#1e3a2f", border:"1px solid #10b981", borderRadius:12, padding:"14px 18px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:12, padding:"14px 18px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
             <span style={{ fontSize:22 }}>📞</span>
             <div><div style={{ fontSize:15, fontWeight:600, color:"#10b981" }}>You have {todaysCalls.length} call{todaysCalls.length>1?"s":""} today</div><div style={{ fontSize:13, color:"#64748b" }}>{todaysCalls.map(c=>`${c.name} at ${c.callTime} ${c.timezone}`).join(" · ")}</div></div>
           </div>
         )}
         {noShows.length > 0 && (
-          <div style={{ background:"#2d1a0e", border:"1px solid #f97316", borderRadius:12, padding:"14px 18px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ background:"#fff7ed", border:"1px solid #fed7aa", borderRadius:12, padding:"14px 18px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
             <span style={{ fontSize:22 }}>⚠️</span>
             <div><div style={{ fontSize:15, fontWeight:600, color:"#f97316" }}>{noShows.length} no-show{noShows.length>1?"s":""} need follow-up</div><div style={{ fontSize:13, color:"#64748b" }}>{noShows.map(c=>c.name).join(", ")}</div></div>
           </div>
@@ -866,9 +866,9 @@ function AgentApp({ user, contacts, setContacts, onLogout }) {
               const hot = leads.filter(c => c.category === "A").length;
               const isMe = name === user.name;
               return (
-                <div key={name} style={{ flex:1, background: isMe ? "#1e2133" : "#111318", border:`1px solid ${isMe?"#6366f1":"#1f2330"}`, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                <div key={name} style={{ flex:1, background: isMe ? "#0f172a" : "#f8fafc", border:`1px solid ${isMe?"#6366f1":"#1e293b"}`, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
                   <div style={{ fontSize:18, marginBottom:4 }}>{["🥇","🥈","🥉","4️⃣"][i]}</div>
-                  <div style={{ fontSize:14, fontWeight:700, color: isMe ? "#818cf8" : "#e2e8f0" }}>{name}{isMe && " (you)"}</div>
+                  <div style={{ fontSize:14, fontWeight:700, color: isMe ? "#818cf8" : "#1e293b" }}>{name}{isMe && " (you)"}</div>
                   <div style={{ fontSize:22, fontWeight:800, color:"#10b981", margin:"6px 0" }}>{leads.length}</div>
                   <div style={{ fontSize:11, color:"#64748b" }}>leads</div>
                   <div style={{ fontSize:12, color:"#64748b", marginTop:6 }}>✅ {completed} closed · 🔥 {hot} hot</div>
@@ -896,10 +896,10 @@ function AgentApp({ user, contacts, setContacts, onLogout }) {
           {myLeads.map(c => (
             <div key={c.id} className="card" style={{ padding:18, cursor:"pointer", transition:"border-color 0.15s" }}
               onClick={() => setSelectedContact(c)}
-              onMouseOver={e=>e.currentTarget.style.borderColor="#3d4268"}
-              onMouseOut={e=>e.currentTarget.style.borderColor="#1f2330"}>
+              onMouseOver={e=>e.currentTarget.style.borderColor="#c7d2fe"}
+              onMouseOut={e=>e.currentTarget.style.borderColor="#1e293b"}>
               <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-                <div style={{ width:46, height:46, background:"linear-gradient(135deg,#1e2133,#2d3247)", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color:scoreColor(c.score), fontFamily:"DM Mono" }}>{c.score}</div>
+                <div style={{ width:46, height:46, background:"linear-gradient(135deg,#ede9fe,#e0e7ff)", borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color:scoreColor(c.score), fontFamily:"DM Mono" }}>{c.score}</div>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:16, fontWeight:700 }}>{c.name}</div>
                   <div style={{ fontSize:13, color:"#64748b" }}>{c.company} · {c.phone}</div>
@@ -911,9 +911,9 @@ function AgentApp({ user, contacts, setContacts, onLogout }) {
                 </div>
               </div>
               {c.callDate && (
-                <div style={{ marginTop:10, paddingTop:10, borderTop:"1px solid #1f2330", fontSize:13, color:"#64748b", display:"flex", gap:16 }}>
+                <div style={{ marginTop:10, paddingTop:10, borderTop:"1px solid #f1f5f9", fontSize:13, color:"#64748b", display:"flex", gap:16 }}>
                   <span>📅 {c.callDate} at {c.callTime} {c.timezone}</span>
-                  {c.callStatus && <span className="pill" style={{ background:"#1e3a2f", color:"#10b981" }}>{c.callStatus}</span>}
+                  {c.callStatus && <span className="pill" style={{ background:"#dcfce7", color:"#10b981" }}>{c.callStatus}</span>}
                 </div>
               )}
             </div>
@@ -933,17 +933,17 @@ function AddContactForm({ onSave, onCancel }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Full Name *</label><input value={form.name} onChange={e=>set("name",e.target.value)} style={{ width:"100%" }} placeholder="Jane Smith" /></div>
-        <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Phone</label><input value={form.phone} onChange={e=>set("phone",e.target.value)} style={{ width:"100%" }} /></div>
-        <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Email</label><input value={form.email} onChange={e=>set("email",e.target.value)} style={{ width:"100%" }} /></div>
-        <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Company</label><input value={form.company} onChange={e=>set("company",e.target.value)} style={{ width:"100%" }} /></div>
-        <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Source</label><select value={form.source} onChange={e=>set("source",e.target.value)} style={{ width:"100%" }}>{SOURCES.map(s=><option key={s}>{s}</option>)}</select></div>
-        <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Assign To</label><select value={form.assignedTo} onChange={e=>set("assignedTo",e.target.value)} style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select></div>
-        <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Budget</label><select value={form.budget} onChange={e=>set("budget",e.target.value)} style={{ width:"100%" }}>{BUDGET_OPTIONS.map(b=><option key={b}>{b}</option>)}</select></div>
-        <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Timeline</label><select value={form.timeline} onChange={e=>set("timeline",e.target.value)} style={{ width:"100%" }}>{TIMELINE_OPTIONS.map(t=><option key={t}>{t}</option>)}</select></div>
+        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Full Name *</label><input value={form.name} onChange={e=>set("name",e.target.value)} style={{ width:"100%" }} placeholder="Jane Smith" /></div>
+        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Phone</label><input value={form.phone} onChange={e=>set("phone",e.target.value)} style={{ width:"100%" }} /></div>
+        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Email</label><input value={form.email} onChange={e=>set("email",e.target.value)} style={{ width:"100%" }} /></div>
+        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Company</label><input value={form.company} onChange={e=>set("company",e.target.value)} style={{ width:"100%" }} /></div>
+        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Source</label><select value={form.source} onChange={e=>set("source",e.target.value)} style={{ width:"100%" }}>{SOURCES.map(s=><option key={s}>{s}</option>)}</select></div>
+        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Assign To</label><select value={form.assignedTo} onChange={e=>set("assignedTo",e.target.value)} style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select></div>
+        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Budget</label><select value={form.budget} onChange={e=>set("budget",e.target.value)} style={{ width:"100%" }}>{BUDGET_OPTIONS.map(b=><option key={b}>{b}</option>)}</select></div>
+        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Timeline</label><select value={form.timeline} onChange={e=>set("timeline",e.target.value)} style={{ width:"100%" }}>{TIMELINE_OPTIONS.map(t=><option key={t}>{t}</option>)}</select></div>
       </div>
-      <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:15, cursor:"pointer" }}><input type="checkbox" checked={form.isDecisionMaker} onChange={e=>set("isDecisionMaker",e.target.checked)} style={{ width:16, height:16 }} /><span style={{ color:"#94a3b8" }}>Decision Maker</span></label>
-      <div><label style={{ fontSize:14, color:"#94a3b8", display:"block", marginBottom:4 }}>Notes</label><textarea value={form.notes} onChange={e=>set("notes",e.target.value)} style={{ width:"100%", minHeight:70, resize:"none", background:"#111318" }} /></div>
+      <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:15, cursor:"pointer" }}><input type="checkbox" checked={form.isDecisionMaker} onChange={e=>set("isDecisionMaker",e.target.checked)} style={{ width:16, height:16 }} /><span style={{ color:"#64748b" }}>Decision Maker</span></label>
+      <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Notes</label><textarea value={form.notes} onChange={e=>set("notes",e.target.value)} style={{ width:"100%", minHeight:70, resize:"none", background:"#f8fafc" }} /></div>
       <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
         <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
         <button className="btn btn-primary" onClick={()=>{if(form.name.trim())onSave(form);}}>Save Contact</button>
