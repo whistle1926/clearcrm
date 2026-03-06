@@ -881,160 +881,218 @@ function TeamAnalytics({ contacts, setContacts, notify }) {
   const [dateRange, setDateRange] = useState("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [agentFilter, setAgentFilter] = useState("All");
   const [projectionMonths, setProjectionMonths] = useState("3");
-  const [selectedAgent, setSelectedAgent] = useState("All");
-  const [aiMode, setAiMode] = useState("overview"); // overview | agent | projection
+  const [aiAgent, setAiAgent] = useState(TEAM_MEMBERS[0]);
+  const [aiMode, setAiMode] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState("");
-  const [activeTab, setActiveTab] = useState("performance"); // performance | agents | reassign
-
-  // ── Date filtering ──────────────────────────────────────────────────────────
-  const now = new Date();
-  const getDateBounds = () => {
-    if (dateRange === "7d") return { from: new Date(now - 7*864e5), to: now };
-    if (dateRange === "30d") return { from: new Date(now - 30*864e5), to: now };
-    if (dateRange === "90d") return { from: new Date(now - 90*864e5), to: now };
-    if (dateRange === "custom" && customFrom && customTo) return { from: new Date(customFrom), to: new Date(customTo) };
-    return { from: new Date("2000-01-01"), to: now };
-  };
-  const { from: dateFrom, to: dateTo } = getDateBounds();
-  const inRange = (c) => {
-    if (!c.callDate) return dateRange === "all";
-    const d = new Date(c.callDate);
-    return d >= dateFrom && d <= dateTo;
-  };
-  const rangedContacts = dateRange === "all" ? contacts : contacts.filter(inRange);
-
-  // ── Per-agent stats ─────────────────────────────────────────────────────────
-  const agentStats = TEAM_MEMBERS.map(name => {
-    const all = contacts.filter(c => c.assignedTo === name);
-    const ranged = rangedContacts.filter(c => c.assignedTo === name);
-    const completed = ranged.filter(c => c.leadStatus === "Completed" || c.callStatus === "completed");
-    const booked = ranged.filter(c => c.callStatus === "booked");
-    const noShow = ranged.filter(c => c.callStatus === "no-show");
-    const hotLeads = ranged.filter(c => c.category === "A");
-    const avgScore = ranged.length ? Math.round(ranged.reduce((s,c)=>s+c.score,0)/ranged.length) : 0;
-    const waSent = ranged.reduce((s,c)=>s+c.whatsappHistory.length,0);
-    const convRate = ranged.length ? Math.round((completed.length/ranged.length)*100) : 0;
-    const pipeline = ranged.reduce((s,c)=>{
-      const v = {"Under 10k":5000,"10k-50k":30000,"50k-100k":75000,"100k-500k":300000,"500k+":750000}[c.budget]||0;
-      return s+v;
-    },0);
-    return { name, total:all.length, rangedTotal:ranged.length, completed:completed.length, booked:booked.length, noShow:noShow.length, hotLeads:hotLeads.length, avgScore, waSent, convRate, pipeline };
-  });
-
-  const topAgent = [...agentStats].sort((a,b)=>b.completed-a.completed)[0];
-  const totalCompleted = agentStats.reduce((s,a)=>s+a.completed,0);
-  const totalBooked = agentStats.reduce((s,a)=>s+a.booked,0);
-  const totalPipeline = agentStats.reduce((s,a)=>s+a.pipeline,0);
-  const overallConvRate = rangedContacts.length ? Math.round((totalCompleted/rangedContacts.length)*100) : 0;
-
-  // ── Projections ─────────────────────────────────────────────────────────────
-  const months = parseInt(projectionMonths) || 3;
-  const periodDays = dateRange==="7d"?7:dateRange==="30d"?30:dateRange==="90d"?90:90;
-  const dailyRate = periodDays > 0 ? totalCompleted / periodDays : 0;
-  const projectedClosings = Math.round(dailyRate * months * 30);
-  const projectedPipeline = Math.round((totalPipeline / Math.max(periodDays,1)) * months * 30);
-
-  // ── AI Analysis ─────────────────────────────────────────────────────────────
-  const runAI = async (mode) => {
-    setAiLoading(true); setAiResult(""); setAiMode(mode);
-    const agentSummary = agentStats.map(a =>
-      `${a.name}: ${a.rangedTotal} leads, ${a.completed} completed, ${a.booked} booked, ${a.noShow} no-shows, ${a.convRate}% conversion, avg score ${a.avgScore}, ${a.waSent} WA messages sent`
-    ).join("\n");
-
-    const prompts = {
-      overview: `You are a senior sales analytics consultant. Analyse this investment firm's CRM team performance data for the selected period and provide:
-1. A concise executive summary (2-3 sentences)
-2. Top 3 strengths across the team
-3. Top 3 areas needing improvement
-4. 3 specific, actionable recommendations
-
-Team data:
-${agentSummary}
-Total leads: ${rangedContacts.length}, Total completed: ${totalCompleted}, Overall conversion: ${overallConvRate}%, Total booked calls: ${totalBooked}
-
-Be specific, data-driven, and concise. Use plain text, no markdown symbols.`,
-
-      agent: `You are a sales coach. Review this individual agent's performance and give personalised coaching advice.
-Agent: ${selectedAgent}
-${agentStats.find(a=>a.name===selectedAgent) ? (() => { const a = agentStats.find(x=>x.name===selectedAgent); return `Leads: ${a.rangedTotal}, Completed: ${a.completed}, Booked: ${a.booked}, No-shows: ${a.noShow}, Conversion rate: ${a.convRate}%, Avg lead score: ${a.avgScore}, WA messages: ${a.waSent}`; })() : "No data"}
-Team average conversion: ${overallConvRate}%
-Other agents for comparison: ${agentSummary}
-
-Provide: 1) A personal performance summary, 2) What they're doing well, 3) 3 specific coaching tips to improve their conversion rate, 4) A suggested daily workflow. Plain text only, no markdown.`,
-
-      projection: `You are a revenue forecasting analyst for an investment firm CRM. Based on current performance data, provide a ${months}-month forward projection.
-Current period stats: ${rangedContacts.length} leads, ${totalCompleted} deals closed, ${overallConvRate}% conversion rate, ${totalBooked} calls booked.
-Agent breakdown: ${agentSummary}
-Projected closings (linear): ${projectedClosings}
-Estimated pipeline value: $${projectedPipeline.toLocaleString()}
-
-Provide:
-1. A realistic ${months}-month projection with reasoning
-2. Best-case and worst-case scenarios
-3. Key risks that could affect the forecast
-4. 2-3 specific actions to exceed the projection
-Plain text only, be specific with numbers.`,
-    };
-
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1200, messages:[{role:"user",content:prompts[mode]}] })
-      });
-      const data = await res.json();
-      setAiResult(data.content?.map(b=>b.text||"").join("") || "No response.");
-    } catch { setAiResult("Could not connect to AI. Check your internet connection."); }
-    setAiLoading(false);
-  };
+  const [activeTab, setActiveTab] = useState("performance");
 
   const agentColors = { Alex:"#6366f1", Jamie:"#10b981", Sam:"#f59e0b", Jordan:"#3b82f6" };
   const fmt = (n) => n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : n >= 1000 ? `$${(n/1000).toFixed(0)}K` : `$${n}`;
 
+  // ── Date range ──────────────────────────────────────────────────────────────
+  const now = new Date();
+  const getDateBounds = () => {
+    if (dateRange==="7d")  return { from: new Date(now - 7*864e5), to: now };
+    if (dateRange==="30d") return { from: new Date(now - 30*864e5), to: now };
+    if (dateRange==="90d") return { from: new Date(now - 90*864e5), to: now };
+    if (dateRange==="custom" && customFrom && customTo) return { from: new Date(customFrom), to: new Date(customTo) };
+    return { from: new Date("2000-01-01"), to: now };
+  };
+  const { from: dateFrom, to: dateTo } = getDateBounds();
+  const inRange = (c) => { if (!c.callDate) return dateRange==="all"; const d=new Date(c.callDate); return d>=dateFrom&&d<=dateTo; };
+  const rangedContacts = dateRange==="all" ? contacts : contacts.filter(inRange);
+
+  // ── Per-agent stats (always full team) ─────────────────────────────────────
+  const agentStats = TEAM_MEMBERS.map(name => {
+    const all = contacts.filter(c=>c.assignedTo===name);
+    const ranged = rangedContacts.filter(c=>c.assignedTo===name);
+    const completed = ranged.filter(c=>c.leadStatus==="Completed"||c.callStatus==="completed");
+    const booked = ranged.filter(c=>c.callStatus==="booked");
+    const noShow = ranged.filter(c=>c.callStatus==="no-show");
+    const avgScore = ranged.length ? Math.round(ranged.reduce((s,c)=>s+c.score,0)/ranged.length) : 0;
+    const waSent = ranged.reduce((s,c)=>s+c.whatsappHistory.length,0);
+    const convRate = ranged.length ? Math.round((completed.length/ranged.length)*100) : 0;
+    const pipeline = ranged.reduce((s,c)=>s+({"Under 10k":5000,"10k-50k":30000,"50k-100k":75000,"100k-500k":300000,"500k+":750000}[c.budget]||0),0);
+    const hotLeads = ranged.filter(c=>c.category==="A").length;
+    return { name, total:all.length, rangedTotal:ranged.length, completed:completed.length, booked:booked.length, noShow:noShow.length, hotLeads, avgScore, waSent, convRate, pipeline, leads:ranged };
+  });
+
+  // ── Filtered view (for KPIs + charts + table) ───────────────────────────────
+  const viewStats = agentFilter==="All" ? agentStats : agentStats.filter(a=>a.name===agentFilter);
+  const focusA = agentFilter!=="All" ? agentStats.find(a=>a.name===agentFilter) : null;
+  const totalLeads = viewStats.reduce((s,a)=>s+a.rangedTotal,0);
+  const totalCompleted = viewStats.reduce((s,a)=>s+a.completed,0);
+  const totalBooked = viewStats.reduce((s,a)=>s+a.booked,0);
+  const totalPipeline = viewStats.reduce((s,a)=>s+a.pipeline,0);
+  const overallConv = totalLeads ? Math.round((totalCompleted/totalLeads)*100) : 0;
+  const topAgent = [...agentStats].sort((a,b)=>b.completed-a.completed)[0];
+
+  // ── Projections ─────────────────────────────────────────────────────────────
+  const months = parseInt(projectionMonths)||3;
+  const periodDays = dateRange==="7d"?7:dateRange==="30d"?30:30;
+  const dailyRate = periodDays>0 ? totalCompleted/periodDays : 0;
+  const projClosings = Math.round(dailyRate*months*30);
+  const projPipeline = Math.round((totalPipeline/Math.max(periodDays,1))*months*30);
+
+  // ── AI ───────────────────────────────────────────────────────────────────────
+  const runAI = async (mode, agentName) => {
+    setAiLoading(true); setAiResult(""); setAiMode(mode);
+    const agentName_ = agentName || aiAgent;
+    const summary = agentStats.map(a=>`${a.name}: ${a.rangedTotal} leads, ${a.completed} closed, ${a.booked} booked, ${a.noShow} no-shows, ${a.convRate}% conv, avg score ${a.avgScore}, pipeline ${fmt(a.pipeline)}`).join("\n");
+    const focusData = agentStats.find(a=>a.name===agentName_);
+    const prompts = {
+      overview: `You are a senior sales analytics consultant for an investment firm. Analyse this team's CRM performance and provide:
+1. Executive summary (2-3 sentences)
+2. Top 3 strengths
+3. Top 3 areas needing improvement
+4. 3 specific, actionable recommendations with expected impact
+
+Team data (${dateRange==="all"?"all time":dateRange}):
+${summary}
+Total: ${totalLeads} leads, ${totalCompleted} closed, ${overallConv}% overall conversion, ${totalBooked} calls booked.
+Plain text only, no markdown.`,
+
+      agent: `You are a sales performance coach for an investment firm. Give a detailed personal coaching report for ${agentName_}.
+Their data: ${focusData ? `${focusData.rangedTotal} leads, ${focusData.completed} closed, ${focusData.booked} booked, ${focusData.noShow} no-shows, ${focusData.convRate}% conversion, avg lead score ${focusData.avgScore}, ${focusData.waSent} WhatsApp messages sent, pipeline ${fmt(focusData.pipeline||0)}` : "no data yet"}
+Team average conversion: ${overallConv}%
+Other agents for benchmarking: ${summary}
+
+Provide:
+1. Personal performance summary (compare to team average)
+2. What they are doing well (be specific)
+3. 3 targeted coaching tips to improve conversion rate
+4. Suggested daily action plan (morning/afternoon routine)
+5. One key metric to focus on this week
+Plain text, no markdown.`,
+
+      projection: `You are a revenue forecasting analyst for an investment firm. Generate a ${months}-month forward projection.
+Current data (${agentFilter==="All"?"full team":agentFilter}): ${totalLeads} leads, ${totalCompleted} closed, ${overallConv}% conversion, ${totalBooked} booked.
+Linear projection: ${projClosings} closings, pipeline ${fmt(projPipeline)}.
+Agent breakdown: ${summary}
+
+Provide:
+1. Realistic ${months}-month projection with reasoning
+2. Best-case scenario (+30% uplift) and what drives it
+3. Worst-case scenario (-30%) and key risks
+4. Top 3 actions to beat the projection
+5. Which agent has the most growth potential and why
+Numbers, plain text only.`,
+    };
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1400,messages:[{role:"user",content:prompts[mode]}]})});
+      const data = await res.json();
+      setAiResult(data.content?.map(b=>b.text||"").join("")||"No response.");
+    } catch { setAiResult("Could not connect. Check your internet."); }
+    setAiLoading(false);
+  };
+
   return (
     <div style={{ padding:28 }} className="fade-in">
-      {/* Header */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+
+      {/* ── TOP BAR: title + date filter ── */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:700 }}>Team Performance & Analytics</h1>
-          <p style={{ color:"#64748b", fontSize:14, marginTop:4 }}>Track agent performance, filter by date, and get AI-powered insights</p>
+          <p style={{ color:"#64748b", fontSize:14, marginTop:4 }}>Filter by agent or date · AI-powered coaching & projections</p>
         </div>
-        {/* Date range filter */}
-        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", justifyContent:"flex-end" }}>
+        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
           <div style={{ display:"flex", background:"#f1f5f9", borderRadius:10, padding:3, gap:2 }}>
-            {[["all","All Time"],["7d","7 Days"],["30d","30 Days"],["90d","90 Days"],["custom","Custom"]].map(([v,l]) => (
-              <button key={v} onClick={() => setDateRange(v)} style={{ padding:"6px 12px", borderRadius:7, border:"none", fontSize:13, fontWeight:500, background:dateRange===v?"#fff":"transparent", color:dateRange===v?"#6366f1":"#64748b", boxShadow:dateRange===v?"0 1px 3px rgba(0,0,0,0.08)":"none", cursor:"pointer", transition:"all 0.15s" }}>{l}</button>
+            {[["all","All Time"],["7d","7 Days"],["30d","30 Days"],["90d","90 Days"],["custom","Custom"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setDateRange(v)} style={{ padding:"6px 12px", borderRadius:7, border:"none", fontSize:13, fontWeight:500, background:dateRange===v?"#fff":"transparent", color:dateRange===v?"#6366f1":"#64748b", boxShadow:dateRange===v?"0 1px 3px rgba(0,0,0,0.08)":"none", cursor:"pointer", transition:"all 0.15s" }}>{l}</button>
             ))}
           </div>
-          {dateRange==="custom" && (
+          {dateRange==="custom"&&(
             <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-              <input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} style={{ fontSize:13, padding:"6px 10px" }} />
-              <span style={{ color:"#94a3b8", fontSize:13 }}>→</span>
-              <input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} style={{ fontSize:13, padding:"6px 10px" }} />
+              <input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} style={{ fontSize:13, padding:"6px 10px" }}/>
+              <span style={{ color:"#94a3b8" }}>→</span>
+              <input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} style={{ fontSize:13, padding:"6px 10px" }}/>
             </div>
           )}
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* ── AGENT FILTER BAR ── */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, padding:"12px 16px", background:"#fff", border:"1px solid #e2e8f0", borderRadius:12, boxShadow:"0 1px 3px rgba(0,0,0,0.04)", flexWrap:"wrap" }}>
+        <span style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginRight:4, letterSpacing:0.5 }}>FILTER BY AGENT</span>
+        {["All",...TEAM_MEMBERS].map(name => {
+          const isActive = agentFilter===name;
+          const color = name==="All"?"#6366f1":(agentColors[name]||"#6366f1");
+          const a = name!=="All" ? agentStats.find(x=>x.name===name) : null;
+          return (
+            <button key={name} onClick={()=>{ setAgentFilter(name); setAiResult(""); if(name!=="All") setAiAgent(name); }}
+              style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 14px", borderRadius:99, border:`2px solid ${isActive?color:"#e2e8f0"}`, background:isActive?color+"18":"#f8fafc", cursor:"pointer", transition:"all 0.15s" }}>
+              {name==="All"
+                ? <span style={{ fontSize:14 }}>🌐</span>
+                : <div style={{ width:22, height:22, background:isActive?color:color+"33", borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:isActive?"#fff":color }}>{name[0]}</div>
+              }
+              <span style={{ fontSize:13, fontWeight:600, color:isActive?color:"#475569" }}>{name==="All"?"All Agents":name}</span>
+              {a && <span style={{ fontSize:11, color:isActive?color:"#94a3b8" }}>{a.rangedTotal} leads</span>}
+              {a && isActive && (
+                <span className="pill" style={{ background:a.convRate>=50?"#dcfce7":a.convRate>=25?"#fef9c3":"#fee2e2", color:a.convRate>=50?"#16a34a":a.convRate>=25?"#ca8a04":"#dc2626", fontSize:11, padding:"1px 7px" }}>{a.convRate}% conv</span>
+              )}
+            </button>
+          );
+        })}
+        {agentFilter!=="All"&&(
+          <button onClick={()=>{setAgentFilter("All");setAiResult("");}} style={{ marginLeft:"auto", fontSize:12, color:"#94a3b8", background:"none", border:"none", cursor:"pointer" }}>✕ Clear</button>
+        )}
+      </div>
+
+      {/* ── AGENT SPOTLIGHT BANNER (shown when agent selected) ── */}
+      {agentFilter!=="All" && focusA && (() => {
+        const color = agentColors[agentFilter]||"#6366f1";
+        const vsTeam = overallConv - (agentStats.filter(a=>a.name!==agentFilter).reduce((s,a)=>s+a.convRate,0)/Math.max(agentStats.filter(a=>a.name!==agentFilter).length,1));
+        return (
+          <div style={{ background:`linear-gradient(135deg,${color}10,${color}05)`, border:`1.5px solid ${color}30`, borderRadius:14, padding:"20px 24px", marginBottom:24, display:"grid", gridTemplateColumns:"auto 1fr auto", gap:20, alignItems:"center" }}>
+            <div style={{ width:56, height:56, background:`${color}22`, borderRadius:14, display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, fontWeight:700, color }}>{agentFilter[0]}</div>
+            <div>
+              <div style={{ fontSize:18, fontWeight:700, color:"#1e293b", marginBottom:4 }}>{agentFilter} — Performance Spotlight</div>
+              <div style={{ display:"flex", gap:20, flexWrap:"wrap" }}>
+                {[["Leads",focusA.rangedTotal],["Closed",focusA.completed],["Booked",focusA.booked],["No-Shows",focusA.noShow],["Hot Leads",focusA.hotLeads],["Avg Score",focusA.avgScore],["WA Sent",focusA.waSent]].map(([l,v])=>(
+                  <div key={l} style={{ textAlign:"center" }}>
+                    <div style={{ fontSize:18, fontWeight:800, color }}>{v}</div>
+                    <div style={{ fontSize:11, color:"#94a3b8" }}>{l}</div>
+                  </div>
+                ))}
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:18, fontWeight:800, color:focusA.convRate>=50?"#10b981":focusA.convRate>=25?"#f59e0b":"#ef4444" }}>{focusA.convRate}%</div>
+                  <div style={{ fontSize:11, color:"#94a3b8" }}>Conversion</div>
+                </div>
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:18, fontWeight:800, color:vsTeam>=0?"#10b981":"#ef4444" }}>{vsTeam>=0?"+":""}{Math.round(vsTeam)}%</div>
+                  <div style={{ fontSize:11, color:"#94a3b8" }}>vs Team Avg</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              <button className="btn btn-primary" style={{ fontSize:13, whiteSpace:"nowrap" }} onClick={()=>{ setAiAgent(agentFilter); runAI("agent",agentFilter); setActiveTab("performance"); }}>✨ AI Coach {agentFilter}</button>
+              <button className="btn btn-ghost" style={{ fontSize:13, whiteSpace:"nowrap" }} onClick={()=>{ setAiAgent(agentFilter); runAI("projection",agentFilter); setActiveTab("performance"); }}>📈 Project {agentFilter}</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── TABS ── */}
       <div style={{ display:"flex", gap:4, marginBottom:24, background:"#f1f5f9", padding:4, borderRadius:10, width:"fit-content" }}>
-        {[["performance","📊 Performance"],["agents","👤 Agent Cards"],["reassign","🔄 Reassign"]].map(([t,l]) => (
+        {[["performance","📊 Performance"],["agents","👤 Agent Cards"],["reassign","🔄 Reassign"]].map(([t,l])=>(
           <button key={t} className={`tab ${activeTab===t?"active":""}`} onClick={()=>setActiveTab(t)}>{l}</button>
         ))}
       </div>
 
-      {/* ── PERFORMANCE TAB ── */}
-      {activeTab==="performance" && (
+      {/* ══════════ PERFORMANCE TAB ══════════ */}
+      {activeTab==="performance"&&(
         <div>
-          {/* KPI row */}
+          {/* KPIs */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:24 }}>
             {[
-              {l:"Total Leads",v:rangedContacts.length,sub:"in period",c:"#6366f1",icon:"👥"},
-              {l:"Deals Closed",v:totalCompleted,sub:`${overallConvRate}% conversion`,c:"#10b981",icon:"✅"},
-              {l:"Calls Booked",v:totalBooked,sub:"in period",c:"#3b82f6",icon:"📞"},
-              {l:"Est. Pipeline",v:fmt(totalPipeline),sub:"total value",c:"#f59e0b",icon:"💰"},
-            ].map(s => (
+              {l:"Total Leads",v:totalLeads,sub:agentFilter==="All"?"across all agents":`assigned to ${agentFilter}`,c:"#6366f1",icon:"👥"},
+              {l:"Deals Closed",v:totalCompleted,sub:`${overallConv}% conversion rate`,c:"#10b981",icon:"✅"},
+              {l:"Calls Booked",v:totalBooked,sub:"scheduled calls",c:"#3b82f6",icon:"📞"},
+              {l:"Est. Pipeline",v:fmt(totalPipeline),sub:"combined value",c:"#f59e0b",icon:"💰"},
+            ].map(s=>(
               <div key={s.l} className="stat-card" style={{ borderTop:`3px solid ${s.c}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
                   <div>
@@ -1048,42 +1106,43 @@ Plain text only, be specific with numbers.`,
             ))}
           </div>
 
-          {/* Agent comparison table */}
+          {/* Comparison table */}
           <div className="card" style={{ padding:0, overflow:"hidden", marginBottom:24 }}>
-            <div style={{ padding:"16px 20px", borderBottom:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontSize:15, fontWeight:600 }}>Agent Comparison</div>
-              {topAgent && <div style={{ fontSize:13, color:"#64748b" }}>🏆 Top performer: <span style={{ color:"#6366f1", fontWeight:600 }}>{topAgent.name}</span></div>}
+            <div style={{ padding:"14px 20px", borderBottom:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontSize:15, fontWeight:600 }}>{agentFilter==="All"?"Agent Comparison":`${agentFilter} — Detailed Breakdown`}</div>
+              {agentFilter==="All"&&topAgent&&<div style={{ fontSize:13, color:"#64748b" }}>🏆 Top performer: <span style={{ color:"#6366f1", fontWeight:600 }}>{topAgent.name}</span></div>}
             </div>
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
               <thead><tr style={{ background:"#f8fafc", borderBottom:"1px solid #f1f5f9" }}>
-                {["Agent","Leads","Completed","Booked","No-Shows","Conv. Rate","Avg Score","WA Sent","Pipeline"].map(h => (
+                {["Agent","Leads","Closed","Booked","No-Shows","Conv. Rate","Avg Score","WA Sent","Pipeline"].map(h=>(
                   <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:12, fontWeight:600, color:"#94a3b8", whiteSpace:"nowrap" }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
-                {agentStats.map((a,i) => (
-                  <tr key={a.name} style={{ borderBottom:"1px solid #f8fafc" }}>
+                {viewStats.map(a=>(
+                  <tr key={a.name} style={{ borderBottom:"1px solid #f8fafc", background:agentFilter===a.name?`${agentColors[a.name]}06`:"transparent" }}>
                     <td style={{ padding:"12px 16px" }}>
                       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                         <div style={{ width:32, height:32, background:`${agentColors[a.name]}22`, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, color:agentColors[a.name] }}>{a.name[0]}</div>
-                        <div><div style={{ fontWeight:600, color:"#1e293b" }}>{a.name}</div><div style={{ fontSize:11, color:"#94a3b8" }}>{USERS.find(u=>u.name===a.name)?.role==="admin"?"Admin":"Agent"}</div></div>
+                        <div>
+                          <div style={{ fontWeight:600, color:"#1e293b" }}>{a.name}</div>
+                          <div style={{ fontSize:11, color:"#94a3b8" }}>{USERS.find(u=>u.name===a.name)?.role==="admin"?"Admin":"Agent"}</div>
+                        </div>
                       </div>
                     </td>
                     <td style={{ padding:"12px 16px", fontWeight:600, color:"#1e293b" }}>{a.rangedTotal}</td>
                     <td style={{ padding:"12px 16px" }}><span style={{ fontWeight:700, color:"#10b981" }}>{a.completed}</span></td>
                     <td style={{ padding:"12px 16px", color:"#3b82f6", fontWeight:600 }}>{a.booked}</td>
-                    <td style={{ padding:"12px 16px" }}><span style={{ color: a.noShow>0?"#f97316":"#94a3b8", fontWeight:a.noShow>0?600:400 }}>{a.noShow}</span></td>
+                    <td style={{ padding:"12px 16px" }}><span style={{ color:a.noShow>0?"#f97316":"#94a3b8", fontWeight:a.noShow>0?600:400 }}>{a.noShow}</span></td>
                     <td style={{ padding:"12px 16px" }}>
                       <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                         <div style={{ width:60, height:6, background:"#f1f5f9", borderRadius:99, overflow:"hidden" }}>
-                          <div style={{ width:`${a.convRate}%`, height:"100%", background:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444", borderRadius:99 }} />
+                          <div style={{ width:`${a.convRate}%`, height:"100%", background:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444", borderRadius:99 }}/>
                         </div>
                         <span style={{ fontWeight:600, color:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444" }}>{a.convRate}%</span>
                       </div>
                     </td>
-                    <td style={{ padding:"12px 16px" }}>
-                      <span style={{ fontFamily:"DM Mono,monospace", fontWeight:600, color:scoreColor(a.avgScore) }}>{a.avgScore}</span>
-                    </td>
+                    <td style={{ padding:"12px 16px" }}><span style={{ fontFamily:"DM Mono,monospace", fontWeight:600, color:scoreColor(a.avgScore) }}>{a.avgScore}</span></td>
                     <td style={{ padding:"12px 16px", color:"#64748b" }}>{a.waSent}</td>
                     <td style={{ padding:"12px 16px", fontWeight:600, color:"#6366f1" }}>{fmt(a.pipeline)}</td>
                   </tr>
@@ -1092,36 +1151,37 @@ Plain text only, be specific with numbers.`,
             </table>
           </div>
 
-          {/* Pipeline bar chart */}
+          {/* Bar charts */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, marginBottom:24 }}>
             <div className="card" style={{ padding:20 }}>
-              <div style={{ fontSize:14, fontWeight:600, marginBottom:16 }}>Pipeline Value by Agent</div>
-              {agentStats.map(a => {
-                const pct = totalPipeline > 0 ? (a.pipeline/totalPipeline)*100 : 0;
+              <div style={{ fontSize:14, fontWeight:600, marginBottom:16 }}>Pipeline Value {agentFilter!=="All"?`— ${agentFilter}`:"by Agent"}</div>
+              {viewStats.map(a=>{
+                const base = agentFilter==="All" ? (totalPipeline>0?(a.pipeline/totalPipeline)*100:0) : Math.min((a.pipeline/2250000)*100,100);
                 return (
                   <div key={a.name} style={{ marginBottom:14 }}>
                     <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:5 }}>
                       <span style={{ fontWeight:600, color:"#1e293b" }}>{a.name}</span>
-                      <span style={{ color:agentColors[a.name], fontWeight:600 }}>{fmt(a.pipeline)} ({Math.round(pct)}%)</span>
+                      <span style={{ color:agentColors[a.name], fontWeight:600 }}>{fmt(a.pipeline)}</span>
                     </div>
-                    <div style={{ height:8, background:"#f1f5f9", borderRadius:99, overflow:"hidden" }}>
-                      <div style={{ width:`${pct}%`, height:"100%", background:agentColors[a.name], borderRadius:99, transition:"width 0.6s ease" }} />
+                    <div style={{ height:8, background:"#f1f5f9", borderRadius:99 }}>
+                      <div style={{ width:`${base}%`, height:"100%", background:agentColors[a.name], borderRadius:99, transition:"width 0.6s" }}/>
                     </div>
                   </div>
                 );
               })}
             </div>
             <div className="card" style={{ padding:20 }}>
-              <div style={{ fontSize:14, fontWeight:600, marginBottom:16 }}>Conversion Rate by Agent</div>
-              {agentStats.map(a => (
+              <div style={{ fontSize:14, fontWeight:600, marginBottom:16 }}>Conversion Rate {agentFilter!=="All"?`— ${agentFilter}`:"by Agent"}</div>
+              {viewStats.map(a=>(
                 <div key={a.name} style={{ marginBottom:14 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:5 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:4 }}>
                     <span style={{ fontWeight:600, color:"#1e293b" }}>{a.name}</span>
                     <span style={{ color:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444", fontWeight:600 }}>{a.convRate}%</span>
                   </div>
-                  <div style={{ height:8, background:"#f1f5f9", borderRadius:99, overflow:"hidden" }}>
-                    <div style={{ width:`${a.convRate}%`, height:"100%", background:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444", borderRadius:99, transition:"width 0.6s ease" }} />
+                  <div style={{ height:8, background:"#f1f5f9", borderRadius:99 }}>
+                    <div style={{ width:`${a.convRate}%`, height:"100%", background:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444", borderRadius:99, transition:"width 0.6s" }}/>
                   </div>
+                  {agentFilter!=="All"&&<div style={{ fontSize:11, color:"#94a3b8", marginTop:4 }}>{a.convRate<25?"⚠️ Below target — AI coaching recommended":a.convRate<50?"📈 On track — room to grow":"🏆 Strong performance"}</div>}
                 </div>
               ))}
             </div>
@@ -1131,7 +1191,7 @@ Plain text only, be specific with numbers.`,
           <div className="card" style={{ padding:24, marginBottom:24, border:"1px solid #e0e7ff", background:"#fafafe" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
               <div>
-                <div style={{ fontSize:15, fontWeight:700 }}>📈 Forward Projections</div>
+                <div style={{ fontSize:15, fontWeight:700 }}>📈 Forward Projections {agentFilter!=="All"?`— ${agentFilter}`:""}</div>
                 <div style={{ fontSize:13, color:"#64748b", marginTop:2 }}>Based on current period performance rate</div>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -1146,10 +1206,10 @@ Plain text only, be specific with numbers.`,
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:16 }}>
               {[
-                {l:`Projected Closings`,v:projectedClosings,sub:`in ${projectionMonths} month${months>1?"s":""}`,c:"#10b981",icon:"🎯"},
-                {l:"Projected Revenue",v:fmt(projectedPipeline),sub:"estimated pipeline",c:"#6366f1",icon:"💰"},
-                {l:"Best Case",v:Math.round(projectedClosings*1.3),sub:"+30% uplift scenario",c:"#3b82f6",icon:"🚀"},
-              ].map(s => (
+                {l:"Projected Closings",v:projClosings,sub:`in ${projectionMonths} month${months>1?"s":""}`,c:"#10b981",icon:"🎯"},
+                {l:"Projected Pipeline",v:fmt(projPipeline),sub:"estimated value",c:"#6366f1",icon:"💰"},
+                {l:"Best Case (+30%)",v:Math.round(projClosings*1.3),sub:"optimistic scenario",c:"#3b82f6",icon:"🚀"},
+              ].map(s=>(
                 <div key={s.l} style={{ background:"#fff", border:"1px solid #e0e7ff", borderRadius:10, padding:16 }}>
                   <div style={{ fontSize:11, color:"#94a3b8", fontWeight:600, marginBottom:8 }}>{s.icon} {s.l.toUpperCase()}</div>
                   <div style={{ fontSize:28, fontWeight:800, color:s.c }}>{s.v}</div>
@@ -1159,126 +1219,124 @@ Plain text only, be specific with numbers.`,
             </div>
           </div>
 
-          {/* AI Insights panel */}
+          {/* AI Insights */}
           <div className="card" style={{ padding:24 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16, flexWrap:"wrap", gap:10 }}>
               <div>
-                <div style={{ fontSize:15, fontWeight:700 }}>✨ AI Performance Analysis</div>
-                <div style={{ fontSize:13, color:"#64748b", marginTop:2 }}>Claude analyses your team data and gives actionable insights</div>
+                <div style={{ fontSize:15, fontWeight:700 }}>✨ AI Analysis & Coaching</div>
+                <div style={{ fontSize:13, color:"#64748b", marginTop:2 }}>Claude analyses your data and gives personalised insights</div>
               </div>
-              <div style={{ display:"flex", gap:8 }}>
-                <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={() => runAI("overview")}>📊 Team Overview</button>
-                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                  <select value={selectedAgent} onChange={e=>setSelectedAgent(e.target.value)} style={{ fontSize:13, padding:"6px 10px", width:110 }}>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={()=>runAI("overview")}>📊 Team Overview</button>
+                <div style={{ display:"flex", gap:6, alignItems:"center", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, padding:"4px 8px" }}>
+                  <select value={aiAgent} onChange={e=>setAiAgent(e.target.value)} style={{ fontSize:13, padding:"4px 6px", border:"none", background:"transparent", color:"#475569" }}>
                     {TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}
                   </select>
-                  <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={() => runAI("agent")}>👤 Coach Agent</button>
+                  <button className="btn btn-ghost" style={{ fontSize:13, border:"none", padding:"6px 10px" }} onClick={()=>runAI("agent")}>👤 Coach</button>
                 </div>
-                <button className="btn btn-primary" style={{ fontSize:13 }} onClick={() => runAI("projection")}>📈 AI Projection</button>
+                <button className="btn btn-primary" style={{ fontSize:13 }} onClick={()=>runAI("projection")}>📈 Projection</button>
               </div>
             </div>
-            {aiLoading && (
+
+            {aiLoading&&(
               <div style={{ background:"#f8fafc", borderRadius:10, padding:32, textAlign:"center" }}>
                 <div style={{ fontSize:28, marginBottom:8 }}>✨</div>
                 <div style={{ fontSize:15, color:"#6366f1", fontWeight:500 }}>
-                  {aiMode==="overview"?"Analysing team performance…":aiMode==="agent"?`Reviewing ${selectedAgent}'s data…`:"Generating projections…"}
+                  {aiMode==="overview"?"Analysing team performance…":aiMode==="agent"?`Coaching ${aiAgent}…`:"Generating projections…"}
                 </div>
-                <div style={{ fontSize:13, color:"#94a3b8", marginTop:4 }}>This usually takes 5-10 seconds</div>
+                <div style={{ fontSize:13, color:"#94a3b8", marginTop:4 }}>Usually takes 5–10 seconds</div>
               </div>
             )}
-            {!aiLoading && aiResult && (
+            {!aiLoading&&aiResult&&(
               <div>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
                   <span className="pill" style={{ background:"#ede9fe", color:"#6366f1" }}>
-                    {aiMode==="overview"?"📊 Team Overview":aiMode==="agent"?`👤 ${selectedAgent} Coaching`:"📈 AI Projection"}
+                    {aiMode==="overview"?"📊 Team Overview":aiMode==="agent"?`👤 ${aiAgent} Coaching`:"📈 Revenue Projection"}
                   </span>
-                  <span style={{ fontSize:12, color:"#94a3b8" }}>Generated just now</span>
+                  <span style={{ fontSize:12, color:"#94a3b8" }}>Generated just now · {agentFilter!=="All"?`Filtered: ${agentFilter}`:"All agents"}</span>
                 </div>
-                <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:20, fontSize:14, lineHeight:1.8, color:"#1e293b", whiteSpace:"pre-wrap" }}>{aiResult}</div>
+                <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:20, fontSize:14, lineHeight:1.85, color:"#1e293b", whiteSpace:"pre-wrap" }}>{aiResult}</div>
                 <div style={{ display:"flex", gap:8, marginTop:12 }}>
-                  <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => navigator.clipboard.writeText(aiResult)}>📋 Copy</button>
-                  <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => setAiResult("")}>✕ Clear</button>
+                  <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>navigator.clipboard.writeText(aiResult)}>📋 Copy</button>
+                  <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>setAiResult("")}>✕ Clear</button>
                 </div>
               </div>
             )}
-            {!aiLoading && !aiResult && (
+            {!aiLoading&&!aiResult&&(
               <div style={{ background:"#f8fafc", borderRadius:10, padding:28, textAlign:"center", color:"#94a3b8" }}>
                 <div style={{ fontSize:32, marginBottom:8 }}>🤖</div>
-                <div style={{ fontSize:14, fontWeight:500 }}>Click a button above to run AI analysis</div>
-                <div style={{ fontSize:13, marginTop:4 }}>Team Overview · Agent Coaching · Revenue Projections</div>
+                <div style={{ fontSize:14, fontWeight:500, color:"#64748b" }}>Click a button above to run AI analysis</div>
+                <div style={{ fontSize:13, marginTop:4 }}>Team Overview · Personal Coaching · Revenue Projections</div>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ── AGENT CARDS TAB ── */}
-      {activeTab==="agents" && (
+      {/* ══════════ AGENT CARDS TAB ══════════ */}
+      {activeTab==="agents"&&(
         <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:20 }}>
-          {agentStats.map(a => {
-            const user = USERS.find(u=>u.name===a.name);
+          {agentStats.map(a=>{
+            const u = USERS.find(x=>x.name===a.name);
+            const color = agentColors[a.name]||"#6366f1";
             return (
-              <div key={a.name} className="card" style={{ padding:24, borderTop:`3px solid ${agentColors[a.name]}` }}>
+              <div key={a.name} className="card" style={{ padding:24, borderTop:`3px solid ${color}`, transition:"box-shadow 0.15s" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:18 }}>
-                  <div style={{ width:48, height:48, background:`${agentColors[a.name]}22`, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, fontWeight:700, color:agentColors[a.name] }}>{a.name[0]}</div>
+                  <div style={{ width:48, height:48, background:`${color}22`, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, fontWeight:700, color }}>{a.name[0]}</div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:17, fontWeight:700, color:"#1e293b" }}>{a.name}</div>
-                    <span className="pill" style={{ background:user?.role==="admin"?"#ede9fe":"#f0fdf4", color:user?.role==="admin"?"#6366f1":"#10b981" }}>{user?.role==="admin"?"Super Admin":"Agent"}</span>
+                    <span className="pill" style={{ background:u?.role==="admin"?"#ede9fe":"#f0fdf4", color:u?.role==="admin"?"#6366f1":"#10b981" }}>{u?.role==="admin"?"Super Admin":"Agent"}</span>
                   </div>
                   <div style={{ textAlign:"right" }}>
                     <div style={{ fontSize:11, color:"#94a3b8", marginBottom:2 }}>PIN</div>
-                    <div style={{ fontFamily:"DM Mono,monospace", fontSize:22, fontWeight:700, color:agentColors[a.name] }}>{user?.pin}</div>
+                    <div style={{ fontFamily:"DM Mono,monospace", fontSize:22, fontWeight:700, color }}>{u?.pin}</div>
                   </div>
                 </div>
-                {/* Score strip */}
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8, marginBottom:16 }}>
-                  {[["Leads",a.rangedTotal,"#6366f1"],["Closed",a.completed,"#10b981"],["Booked",a.booked,"#3b82f6"],["No-Show",a.noShow,"#f97316"]].map(([l,v,c]) => (
+                  {[["Leads",a.rangedTotal,"#6366f1"],["Closed",a.completed,"#10b981"],["Booked",a.booked,"#3b82f6"],["No-Show",a.noShow,"#f97316"]].map(([l,v,c])=>(
                     <div key={l} style={{ background:"#f8fafc", borderRadius:8, padding:"10px 8px", textAlign:"center" }}>
                       <div style={{ fontSize:20, fontWeight:800, color:c }}>{v}</div>
                       <div style={{ fontSize:11, color:"#94a3b8" }}>{l}</div>
                     </div>
                   ))}
                 </div>
-                {/* Conv rate bar */}
-                <div style={{ marginBottom:12 }}>
+                <div style={{ marginBottom:10 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#94a3b8", marginBottom:4 }}>
                     <span>Conversion Rate</span>
                     <span style={{ fontWeight:600, color:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444" }}>{a.convRate}%</span>
                   </div>
                   <div style={{ height:8, background:"#f1f5f9", borderRadius:99 }}>
-                    <div style={{ width:`${a.convRate}%`, height:"100%", background:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444", borderRadius:99, transition:"width 0.6s" }} />
+                    <div style={{ width:`${a.convRate}%`, height:"100%", background:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444", borderRadius:99, transition:"width 0.6s" }}/>
                   </div>
                 </div>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#64748b" }}>
-                  <span>Avg Score: <span style={{ fontWeight:700, color:scoreColor(a.avgScore) }}>{a.avgScore}</span></span>
-                  <span>WA Sent: <span style={{ fontWeight:600, color:"#25d366" }}>{a.waSent}</span></span>
-                  <span>Pipeline: <span style={{ fontWeight:600, color:"#6366f1" }}>{fmt(a.pipeline)}</span></span>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#64748b", marginBottom:14 }}>
+                  <span>Avg Score <span style={{ fontWeight:700, color:scoreColor(a.avgScore) }}>{a.avgScore}</span></span>
+                  <span>WA <span style={{ fontWeight:600, color:"#25d366" }}>{a.waSent}</span></span>
+                  <span>Pipeline <span style={{ fontWeight:600, color:"#6366f1" }}>{fmt(a.pipeline)}</span></span>
+                  <span>Hot <span style={{ fontWeight:600, color:"#f59e0b" }}>{a.hotLeads}</span></span>
                 </div>
-                <button className="btn btn-ghost" style={{ width:"100%", marginTop:14, fontSize:13 }} onClick={() => { setSelectedAgent(a.name); runAI("agent"); setActiveTab("performance"); }}>✨ Get AI Coaching for {a.name}</button>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button className="btn btn-ghost" style={{ flex:1, fontSize:12 }} onClick={()=>{setAgentFilter(a.name);setActiveTab("performance");}}>🔍 Focus View</button>
+                  <button className="btn btn-primary" style={{ flex:1, fontSize:12 }} onClick={()=>{ setAiAgent(a.name); runAI("agent",a.name); setActiveTab("performance"); }}>✨ AI Coach</button>
+                </div>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* ── REASSIGN TAB ── */}
-      {activeTab==="reassign" && (
+      {/* ══════════ REASSIGN TAB ══════════ */}
+      {activeTab==="reassign"&&(
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
           <div className="card" style={{ padding:24 }}>
             <div style={{ fontSize:15, fontWeight:600, marginBottom:16 }}>Reassign Leads in Bulk</div>
             <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-              <div>
-                <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:6 }}>From agent</label>
-                <select id="from-agent" style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select>
-              </div>
-              <div>
-                <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:6 }}>To agent</label>
-                <select id="to-agent" style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select>
-              </div>
-              <button className="btn btn-primary" onClick={() => {
-                const from = document.getElementById("from-agent").value;
-                const to = document.getElementById("to-agent").value;
-                if (from===to) return;
+              <div><label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:6 }}>From agent</label><select id="from-agent" style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select></div>
+              <div><label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:6 }}>To agent</label><select id="to-agent" style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select></div>
+              <button className="btn btn-primary" onClick={()=>{
+                const from=document.getElementById("from-agent").value;
+                const to=document.getElementById("to-agent").value;
+                if(from===to)return;
                 setContacts(prev=>prev.map(c=>c.assignedTo===from?{...c,assignedTo:to}:c));
                 notify(`Moved all leads from ${from} to ${to}`);
               }}>Reassign All Leads</button>
@@ -1286,8 +1344,8 @@ Plain text only, be specific with numbers.`,
           </div>
           <div className="card" style={{ padding:24 }}>
             <div style={{ fontSize:15, fontWeight:600, marginBottom:16 }}>Current Lead Distribution</div>
-            {agentStats.map(a => {
-              const pct = contacts.length > 0 ? Math.round((a.total/contacts.length)*100) : 0;
+            {agentStats.map(a=>{
+              const pct = contacts.length>0?Math.round((a.total/contacts.length)*100):0;
               return (
                 <div key={a.name} style={{ marginBottom:14 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:5 }}>
@@ -1295,7 +1353,7 @@ Plain text only, be specific with numbers.`,
                     <span style={{ color:"#64748b" }}>{a.total} leads ({pct}%)</span>
                   </div>
                   <div style={{ height:8, background:"#f1f5f9", borderRadius:99 }}>
-                    <div style={{ width:`${pct}%`, height:"100%", background:agentColors[a.name], borderRadius:99 }} />
+                    <div style={{ width:`${pct}%`, height:"100%", background:agentColors[a.name], borderRadius:99 }}/>
                   </div>
                 </div>
               );
@@ -1306,6 +1364,7 @@ Plain text only, be specific with numbers.`,
     </div>
   );
 }
+
 
 // ─── ADD CONTACT FORM ──────────────────────────────────────────────────────────
 function AddContactForm({ onSave, onCancel }) {
