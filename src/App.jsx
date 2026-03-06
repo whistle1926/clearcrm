@@ -882,6 +882,7 @@ function TeamAnalytics({ contacts, setContacts, notify }) {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [agentFilter, setAgentFilter] = useState("All");
+  const [lbMetric, setLbMetric] = useState("pipeline"); // leaderboard sort metric
   const [projectionMonths, setProjectionMonths] = useState("3");
   const [aiAgent, setAiAgent] = useState(TEAM_MEMBERS[0]);
   const [aiMode, setAiMode] = useState("");
@@ -1106,49 +1107,61 @@ Numbers, plain text only.`,
             ))}
           </div>
 
-          {/* Comparison table */}
+          {/* Leaderboard */}
           <div className="card" style={{ padding:0, overflow:"hidden", marginBottom:24 }}>
-            <div style={{ padding:"14px 20px", borderBottom:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontSize:15, fontWeight:600 }}>{agentFilter==="All"?"Agent Comparison":`${agentFilter} — Detailed Breakdown`}</div>
-              {agentFilter==="All"&&topAgent&&<div style={{ fontSize:13, color:"#64748b" }}>🏆 Top performer: <span style={{ color:"#6366f1", fontWeight:600 }}>{topAgent.name}</span></div>}
+            <div style={{ padding:"14px 20px", borderBottom:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:10 }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:600 }}>{agentFilter==="All"?"🏆 Leaderboard":`${agentFilter} — Detailed Breakdown`}</div>
+                <div style={{ fontSize:12, color:"#94a3b8", marginTop:2 }}>Sorted by: <span style={{ color:"#6366f1", fontWeight:600 }}>{[["pipeline","Allocations (Invested)"],["completed","Deals Closed"],["convRate","Conversion Rate"],["rangedTotal","Total Leads"],["avgScore","Avg Score"],["booked","Calls Booked"],["waSent","WA Messages"]].find(([v])=>v===lbMetric)?.[1]}</span></div>
+              </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                {[["pipeline","💰 Allocations"],["completed","✅ Closed"],["convRate","📈 Conv. Rate"],["rangedTotal","👥 Leads"],["avgScore","⭐ Score"],["booked","📞 Booked"],["waSent","💬 WA"]].map(([v,l])=>(
+                  <button key={v} onClick={()=>setLbMetric(v)} style={{ padding:"5px 12px", borderRadius:99, border:`1.5px solid ${lbMetric===v?"#6366f1":"#e2e8f0"}`, background:lbMetric===v?"#6366f1":"transparent", color:lbMetric===v?"#fff":"#64748b", fontSize:12, fontWeight:500, cursor:"pointer", transition:"all 0.15s" }}>{l}</button>
+                ))}
+              </div>
             </div>
-            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:14 }}>
-              <thead><tr style={{ background:"#f8fafc", borderBottom:"1px solid #f1f5f9" }}>
-                {["Agent","Leads","Closed","Booked","No-Shows","Conv. Rate","Avg Score","WA Sent","Pipeline"].map(h=>(
-                  <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:12, fontWeight:600, color:"#94a3b8", whiteSpace:"nowrap" }}>{h}</th>
-                ))}
-              </tr></thead>
-              <tbody>
-                {viewStats.map(a=>(
-                  <tr key={a.name} style={{ borderBottom:"1px solid #f8fafc", background:agentFilter===a.name?`${agentColors[a.name]}06`:"transparent" }}>
-                    <td style={{ padding:"12px 16px" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                        <div style={{ width:32, height:32, background:`${agentColors[a.name]}22`, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, color:agentColors[a.name] }}>{a.name[0]}</div>
-                        <div>
-                          <div style={{ fontWeight:600, color:"#1e293b" }}>{a.name}</div>
-                          <div style={{ fontSize:11, color:"#94a3b8" }}>{USERS.find(u=>u.name===a.name)?.role==="admin"?"Admin":"Agent"}</div>
-                        </div>
+            {/* Ranked rows */}
+            {[...viewStats].sort((a,b)=>b[lbMetric]-a[lbMetric]).map((a,i)=>{
+              const color = agentColors[a.name]||"#6366f1";
+              const rankEmoji = ["🥇","🥈","🥉","4️⃣"][i]||`${i+1}.`;
+              const metricVal = lbMetric==="pipeline"?fmt(a.pipeline):lbMetric==="convRate"?`${a.convRate}%`:lbMetric==="avgScore"?a.avgScore:a[lbMetric];
+              const maxVal = Math.max(...viewStats.map(x=>x[lbMetric]),1);
+              const barPct = maxVal>0?(a[lbMetric]/maxVal)*100:0;
+              const isTop = i===0 && agentFilter==="All";
+              return (
+                <div key={a.name} style={{ padding:"16px 20px", borderBottom:"1px solid #f8fafc", background:isTop?`${color}06`:agentFilter===a.name?`${color}04`:"transparent", transition:"background 0.15s" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+                    {/* Rank */}
+                    <div style={{ width:32, textAlign:"center", fontSize:isTop?22:16, flexShrink:0 }}>{rankEmoji}</div>
+                    {/* Avatar */}
+                    <div style={{ width:40, height:40, background:`${color}22`, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color, flexShrink:0 }}>{a.name[0]}</div>
+                    {/* Name + role */}
+                    <div style={{ width:90, flexShrink:0 }}>
+                      <div style={{ fontWeight:700, color:"#1e293b", fontSize:15 }}>{a.name}</div>
+                      <div style={{ fontSize:11, color:"#94a3b8" }}>{USERS.find(u=>u.name===a.name)?.role==="admin"?"Admin":"Agent"}</div>
+                    </div>
+                    {/* Progress bar + metric value */}
+                    <div style={{ flex:1 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                        <span style={{ fontSize:13, color:"#64748b" }}>
+                          {a.rangedTotal} leads · {a.completed} closed · {a.booked} booked · {a.noShow} no-shows · {a.convRate}% conv
+                        </span>
+                        <span style={{ fontSize:18, fontWeight:800, color, fontFamily:lbMetric==="avgScore"?"DM Mono,monospace":"inherit" }}>{metricVal}</span>
                       </div>
-                    </td>
-                    <td style={{ padding:"12px 16px", fontWeight:600, color:"#1e293b" }}>{a.rangedTotal}</td>
-                    <td style={{ padding:"12px 16px" }}><span style={{ fontWeight:700, color:"#10b981" }}>{a.completed}</span></td>
-                    <td style={{ padding:"12px 16px", color:"#3b82f6", fontWeight:600 }}>{a.booked}</td>
-                    <td style={{ padding:"12px 16px" }}><span style={{ color:a.noShow>0?"#f97316":"#94a3b8", fontWeight:a.noShow>0?600:400 }}>{a.noShow}</span></td>
-                    <td style={{ padding:"12px 16px" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                        <div style={{ width:60, height:6, background:"#f1f5f9", borderRadius:99, overflow:"hidden" }}>
-                          <div style={{ width:`${a.convRate}%`, height:"100%", background:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444", borderRadius:99 }}/>
-                        </div>
-                        <span style={{ fontWeight:600, color:a.convRate>=50?"#10b981":a.convRate>=25?"#f59e0b":"#ef4444" }}>{a.convRate}%</span>
+                      <div style={{ height:8, background:"#f1f5f9", borderRadius:99, overflow:"hidden" }}>
+                        <div style={{ width:`${barPct}%`, height:"100%", background:color, borderRadius:99, transition:"width 0.6s ease" }}/>
                       </div>
-                    </td>
-                    <td style={{ padding:"12px 16px" }}><span style={{ fontFamily:"DM Mono,monospace", fontWeight:600, color:scoreColor(a.avgScore) }}>{a.avgScore}</span></td>
-                    <td style={{ padding:"12px 16px", color:"#64748b" }}>{a.waSent}</td>
-                    <td style={{ padding:"12px 16px", fontWeight:600, color:"#6366f1" }}>{fmt(a.pipeline)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                    {/* Mini stat pills */}
+                    <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                      <span className="pill" style={{ background:"#f0fdf4", color:"#16a34a", fontSize:11 }}>{fmt(a.pipeline)}</span>
+                      <span className="pill" style={{ background:a.convRate>=50?"#dcfce7":a.convRate>=25?"#fef9c3":"#fee2e2", color:a.convRate>=50?"#16a34a":a.convRate>=25?"#ca8a04":"#dc2626", fontSize:11 }}>{a.convRate}% conv</span>
+                      {isTop && <span className="pill" style={{ background:"#fef9c3", color:"#ca8a04", fontSize:11 }}>🏆 Top</span>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Bar charts */}
