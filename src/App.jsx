@@ -424,6 +424,10 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
   const [waMessage, setWaMessage] = useState("");
   const [sortField, setSortField] = useState("score");
   const [sortDir, setSortDir] = useState("desc");
+  const [waConfig, setWaConfig] = useState({
+    accessToken: "",
+    agents: Object.fromEntries(TEAM_MEMBERS.map(m => [m, { phoneNumberId: "", number: "", displayName: m }]))
+  });
   const { notify, NotificationEl } = useNotify();
 
   const updateContact = (id, updates) => setContacts(prev => prev.map(c => c.id===id ? {...c,...updates} : c));
@@ -675,25 +679,126 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
         {/* SETTINGS */}
         {view==="settings" && (
           <div style={{ padding:28 }} className="fade-in">
-            <h1 style={{ fontSize:22, fontWeight:700, marginBottom:20 }}>Settings</h1>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
-              <div className="card" style={{ padding:24 }}>
-                <div style={{ fontSize:15, fontWeight:600, marginBottom:16 }}>WhatsApp Business API</div>
-                <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
-                  <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:6 }}>Phone Number ID</label><input placeholder="Enter WA Business phone ID" style={{ width:"100%" }} /></div>
-                  <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:6 }}>Access Token</label><input type="password" placeholder="••••••••••••" style={{ width:"100%" }} /></div>
-                  <button className="btn btn-primary" onClick={()=>notify("Settings saved!")}>Save API Settings</button>
+            <h1 style={{ fontSize:22, fontWeight:700, marginBottom:6 }}>Settings</h1>
+            <p style={{ color:"#64748b", fontSize:14, marginBottom:24 }}>Configure WhatsApp API credentials per agent. Each agent uses their own number when messaging leads.</p>
+
+            {/* Shared Access Token */}
+            <div className="card" style={{ padding:24, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
+                <div style={{ width:36, height:36, background:"#25d36622", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>💬</div>
+                <div>
+                  <div style={{ fontSize:15, fontWeight:700 }}>WhatsApp Business API — Shared Token</div>
+                  <div style={{ fontSize:13, color:"#64748b" }}>One access token covers all agent numbers under your Meta Business Account</div>
                 </div>
               </div>
-              <div className="card" style={{ padding:24 }}>
-                <div style={{ fontSize:15, fontWeight:600, marginBottom:16 }}>Scoring Rules</div>
-                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                  {[["Budget 500k+","+25"],["Decision Maker","+15"],["Timeline < 1mo","+25"],["High Interest (5★)","+20"],["WA Engagement","+15"],["Low Budget","+5"]].map(([k,v]) => (
-                    <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"8px 12px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, fontSize:14 }}>
-                      <span style={{ color:"#64748b" }}>{k}</span><span style={{ color:"#6366f1", fontWeight:700 }}>{v}</span>
-                    </div>
-                  ))}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:12, alignItems:"end" }}>
+                <div>
+                  <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:6 }}>Access Token <span style={{ color:"#94a3b8" }}>(shared across all agents)</span></label>
+                  <input type="password" value={waConfig.accessToken} onChange={e=>setWaConfig(p=>({...p,accessToken:e.target.value}))} placeholder="EAAxxxxx… (from Meta Developer Console)" style={{ width:"100%", fontFamily:"DM Mono,monospace", fontSize:13 }} />
                 </div>
+                <button className="btn btn-primary" onClick={()=>notify("✅ Access token saved!")}>Save Token</button>
+              </div>
+              <div style={{ marginTop:12, padding:"10px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, fontSize:13, color:"#166534" }}>
+                💡 Get your token from <strong>developers.facebook.com</strong> → Your App → WhatsApp → API Setup
+              </div>
+            </div>
+
+            {/* Per-agent phone numbers */}
+            <div className="card" style={{ padding:24, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+                <div style={{ width:36, height:36, background:"#6366f122", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👥</div>
+                <div>
+                  <div style={{ fontSize:15, fontWeight:700 }}>Agent WhatsApp Numbers</div>
+                  <div style={{ fontSize:13, color:"#64748b" }}>Each agent needs their own Phone Number ID registered in your Meta Business Account</div>
+                </div>
+              </div>
+
+              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                {TEAM_MEMBERS.map(name => {
+                  const agentConf = waConfig.agents[name] || { phoneNumberId:"", number:"", displayName:name };
+                  const color = {Alex:"#6366f1",Jamie:"#10b981",Sam:"#f59e0b",Jordan:"#3b82f6"}[name]||"#6366f1";
+                  const isConfigured = agentConf.phoneNumberId && agentConf.number;
+                  return (
+                    <div key={name} style={{ border:`1.5px solid ${isConfigured?"#bbf7d0":"#e2e8f0"}`, borderRadius:12, padding:18, background:isConfigured?"#f0fdf4":"#fff", transition:"all 0.2s" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+                        <div style={{ width:40, height:40, background:`${color}22`, borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700, color }}>{name[0]}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontSize:15, fontWeight:700, color:"#1e293b" }}>{name}</div>
+                          <div style={{ fontSize:12, color:"#94a3b8" }}>{USERS.find(u=>u.name===name)?.role==="admin"?"Super Admin":"Agent"}</div>
+                        </div>
+                        <span className="pill" style={{ background:isConfigured?"#dcfce7":"#f1f5f9", color:isConfigured?"#16a34a":"#94a3b8", fontSize:12 }}>
+                          {isConfigured?"✅ Configured":"⚙️ Not set up"}
+                        </span>
+                      </div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+                        <div>
+                          <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Phone Number ID</label>
+                          <input value={agentConf.phoneNumberId} onChange={e=>setWaConfig(p=>({...p,agents:{...p.agents,[name]:{...agentConf,phoneNumberId:e.target.value}}}))}
+                            placeholder="1234567890…" style={{ width:"100%", fontSize:13, fontFamily:"DM Mono,monospace" }} />
+                          <div style={{ fontSize:11, color:"#94a3b8", marginTop:3 }}>From Meta → Phone Numbers</div>
+                        </div>
+                        <div>
+                          <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>WhatsApp Number</label>
+                          <input value={agentConf.number} onChange={e=>setWaConfig(p=>({...p,agents:{...p.agents,[name]:{...agentConf,number:e.target.value}}}))}
+                            placeholder="+447700123456" style={{ width:"100%", fontSize:13, fontFamily:"DM Mono,monospace" }} />
+                          <div style={{ fontSize:11, color:"#94a3b8", marginTop:3 }}>Full intl. format</div>
+                        </div>
+                        <div>
+                          <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Display Name</label>
+                          <input value={agentConf.displayName} onChange={e=>setWaConfig(p=>({...p,agents:{...p.agents,[name]:{...agentConf,displayName:e.target.value}}}))}
+                            placeholder={name} style={{ width:"100%", fontSize:13 }} />
+                          <div style={{ fontSize:11, color:"#94a3b8", marginTop:3 }}>Shown to leads</div>
+                        </div>
+                      </div>
+                      {isConfigured && (
+                        <div style={{ marginTop:12, padding:"8px 12px", background:"#fff", border:"1px solid #bbf7d0", borderRadius:8, fontSize:12, color:"#166534", display:"flex", gap:16 }}>
+                          <span>📱 <strong>{agentConf.number}</strong></span>
+                          <span>🔑 ID: <span style={{ fontFamily:"DM Mono,monospace" }}>{agentConf.phoneNumberId.slice(0,8)}…</span></span>
+                          <span>💬 Sends as: <strong>{agentConf.displayName}</strong></span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:20 }}>
+                <button className="btn btn-ghost" onClick={()=>notify("Changes discarded")}>Cancel</button>
+                <button className="btn btn-primary" onClick={()=>notify("✅ Agent WA numbers saved!")}>Save All Numbers</button>
+              </div>
+            </div>
+
+            {/* How it works explainer */}
+            <div className="card" style={{ padding:24, marginBottom:20 }}>
+              <div style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>📋 How Per-Agent WhatsApp Works</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:16 }}>
+                {[
+                  { step:"1", title:"Register numbers", desc:"Add each agent's mobile number to your WhatsApp Business API account in Meta. Each gets a unique Phone Number ID.", color:"#6366f1" },
+                  { step:"2", title:"Enter details here", desc:"Paste each agent's Phone Number ID and number above. One shared Access Token covers all of them.", color:"#10b981" },
+                  { step:"3", title:"Auto-routing", desc:"When an agent sends a WhatsApp message from ClearCRM, it routes through their registered number — leads see their agent's name.", color:"#f59e0b" },
+                ].map(s => (
+                  <div key={s.step} style={{ padding:16, background:"#f8fafc", borderRadius:10, border:"1px solid #e2e8f0" }}>
+                    <div style={{ width:28, height:28, background:`${s.color}22`, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, fontWeight:700, color:s.color, marginBottom:10 }}>{s.step}</div>
+                    <div style={{ fontSize:14, fontWeight:600, color:"#1e293b", marginBottom:6 }}>{s.title}</div>
+                    <div style={{ fontSize:13, color:"#64748b", lineHeight:1.6 }}>{s.desc}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop:16, padding:"12px 16px", background:"#ede9fe", border:"1px solid #c4b5fd", borderRadius:8, fontSize:13, color:"#5b21b6" }}>
+                💡 <strong>Cost:</strong> Meta charges ~$0.05–0.08 per conversation per agent number/month. For 4 agents sending ~200 messages/month each, expect roughly <strong>$40–65/month</strong> total on the WhatsApp Business API.
+              </div>
+            </div>
+
+            {/* Scoring rules */}
+            <div className="card" style={{ padding:24 }}>
+              <div style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>Lead Scoring Rules</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                {[["Budget 500k+","+25","#10b981"],["Decision Maker","+15","#6366f1"],["Timeline < 1mo","+25","#10b981"],["High Interest (5★)","+20","#6366f1"],["WA Engagement","+15","#3b82f6"],["No Response","-10","#ef4444"],["Low Budget (<10k)","+5","#94a3b8"],["No Show","-13","#f97316"]].map(([k,v,c]) => (
+                  <div key={k} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, fontSize:14 }}>
+                    <span style={{ color:"#475569" }}>{k}</span>
+                    <span style={{ color:c, fontWeight:700, fontFamily:"DM Mono,monospace" }}>{v}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
