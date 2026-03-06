@@ -521,7 +521,7 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
                 <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>📞 TODAY'S CALLS</div>
                 {todaysCalls.length===0 ? <div style={{ color:"#64748b", fontSize:14 }}>No calls today.</div> : todaysCalls.map(c => (
                   <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
-                    <div style={{ width:40, height:40, background:"#0f172a", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>{c.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
+                    <div style={{ width:40, height:40, background:"#e0e7ff", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#6366f1", fontWeight:700 }}>{c.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
                     <div style={{ flex:1 }}><div style={{ fontSize:15, fontWeight:600 }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.callTime} {c.timezone} · {c.company}</div></div>
                     <span className="pill" style={{ background:"#dcfce7", color:"#10b981" }}>Booked</span>
                   </div>
@@ -550,7 +550,7 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
                 <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>💬 RECENT WHATSAPP</div>
                 {recentWA.length===0 ? <div style={{ color:"#64748b", fontSize:14 }}>No messages yet.</div> : recentWA.map(w => (
                   <div key={w.id+w.contactId} style={{ padding:"8px 0", borderBottom:"1px solid #f1f5f9" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontSize:14, fontWeight:600, color:"#64748b" }}>{w.contactName}</span><span className="pill" style={{ background:w.status==="read"?"#dcfce7":"#0f172a", color:w.status==="read"?"#10b981":"#64748b" }}>{w.status}</span></div>
+                    <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontSize:14, fontWeight:600, color:"#64748b" }}>{w.contactName}</span><span className="pill" style={{ background:w.status==="read"?"#dcfce7":w.status==="delivered"?"#dbeafe":"#f1f5f9", color:w.status==="read"?"#16a34a":w.status==="delivered"?"#2563eb":"#94a3b8" }}>{w.status}</span></div>
                     <div style={{ fontSize:13, color:"#64748b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{w.msg}</div>
                   </div>
                 ))}
@@ -816,9 +816,9 @@ function AgentApp({ user, contacts, setContacts, onLogout }) {
               const hot = leads.filter(c => c.category === "A").length;
               const isMe = name === user.name;
               return (
-                <div key={name} style={{ flex:1, background: isMe ? "#0f172a" : "#f8fafc", border:`1px solid ${isMe?"#6366f1":"#1e293b"}`, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                <div key={name} style={{ flex:1, background: isMe ? "#ede9fe" : "#f8fafc", border:`1px solid ${isMe?"#6366f1":"#e2e8f0"}`, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
                   <div style={{ fontSize:18, marginBottom:4 }}>{["🥇","🥈","🥉","4️⃣"][i]}</div>
-                  <div style={{ fontSize:14, fontWeight:700, color: isMe ? "#818cf8" : "#1e293b" }}>{name}{isMe && " (you)"}</div>
+                  <div style={{ fontSize:14, fontWeight:700, color: isMe ? "#6366f1" : "#1e293b" }}>{name}{isMe && " (you)"}</div>
                   <div style={{ fontSize:22, fontWeight:800, color:"#10b981", margin:"6px 0" }}>{leads.length}</div>
                   <div style={{ fontSize:11, color:"#64748b" }}>leads</div>
                   <div style={{ fontSize:12, color:"#64748b", marginTop:6 }}>✅ {completed} closed · 🔥 {hot} hot</div>
