@@ -526,11 +526,12 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
             {/* First-contact warning */}
             {!confirmed && (
               <div style={{ padding:"10px 14px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:10, marginBottom:14, fontSize:13 }}>
-                <div style={{ fontWeight:600, color:"#92400e", marginBottom:4 }}>⚠️ First message to this contact?</div>
-                <div style={{ color:"#78350f", marginBottom:8 }}>Meta only allows free-form messages to numbers that have previously messaged you. For cold outreach, you may need a pre-approved template.</div>
+                <div style={{ fontWeight:600, color:"#92400e", marginBottom:4 }}>⚠️ Confirm before sending</div>
+                <div style={{ color:"#78350f", marginBottom:6 }}>Meta only allows free-form messages to numbers that have previously messaged you, <strong>unless</strong> you're using Meta's test number (+1 555 161 4303) — in that case tick below and send freely.</div>
+                <div style={{ color:"#78350f", marginBottom:8 }}>For live numbers doing cold outreach, the recipient must first message your WhatsApp number, or you need a pre-approved template.</div>
                 <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
                   <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} style={{ accentColor:"#f59e0b" }} />
-                  <span style={{ color:"#92400e", fontWeight:500 }}>This contact has previously messaged us / I understand</span>
+                  <span style={{ color:"#92400e", fontWeight:500 }}>This contact has previously messaged us / using test number / I understand</span>
                 </label>
               </div>
             )}
