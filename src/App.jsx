@@ -162,7 +162,16 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
   const [activeTab, setActiveTab] = useState("overview");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState("");
+  const [editMode, setEditMode] = useState(false);
+  const [editForm, setEditForm] = useState({ name:c.name, phone:c.phone, email:c.email, company:c.company, source:c.source, budget:c.budget, timeline:c.timeline, isDecisionMaker:c.isDecisionMaker, interestLevel:c.interestLevel, assignedTo:c.assignedTo });
   const { notify, NotificationEl } = useNotify();
+
+  const saveEdit = () => {
+    updateContact(c.id, editForm);
+    setEditMode(false);
+    notify("✅ Contact updated!");
+  };
+  const setF = (k,v) => setEditForm(f=>({...f,[k]:v}));
 
   const handleCallStatusChange = (newStatus) => {
     const updates = { callStatus: newStatus };
@@ -207,6 +216,8 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
           <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
             <span className="pill" style={{ background: categoryColor(c.category)+"22", color: categoryColor(c.category), fontSize: 13, padding: "4px 12px" }}>Cat {c.category}</span>
             <span style={{ fontSize: 24, fontWeight: 800, color: scoreColor(c.score), fontFamily: "DM Mono,monospace" }}>{c.score}</span>
+            {!editMode && <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={() => { setEditMode(true); setEditForm({ name:c.name, phone:c.phone, email:c.email, company:c.company, source:c.source, budget:c.budget, timeline:c.timeline, isDecisionMaker:c.isDecisionMaker, interestLevel:c.interestLevel, assignedTo:c.assignedTo }); }}>✏️ Edit</button>}
+            {editMode && <><button className="btn btn-ghost" style={{ fontSize:13 }} onClick={() => setEditMode(false)}>Cancel</button><button className="btn btn-primary" style={{ fontSize:13 }} onClick={saveEdit}>💾 Save</button></>}
             <button className="btn btn-primary" onClick={() => { setShowWAModal(c); setWaMessage(""); }}>💬 Send WhatsApp</button>
           </div>
         </div>
@@ -221,26 +232,95 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
       {activeTab === "overview" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
           <div className="card" style={{ padding: 20 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 14 }}>CONTACT INFO</div>
-            {[["Full Name",c.name],["Email",c.email],["Phone",c.phone],["Company",c.company],["Source",c.source]].map(([k,v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #1f2330", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#1e293b", fontWeight: 500 }}>{v||"—"}</span></div>
-            ))}
-            {isAdmin && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>ASSIGN TO AGENT</div>
-                <select value={c.assignedTo} onChange={e => updateContact(c.id, { assignedTo: e.target.value })} style={{ width: "100%" }}>{TEAM_MEMBERS.map(m => <option key={m}>{m}</option>)}</select>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b" }}>CONTACT INFO</div>
+              {editMode && <span className="pill" style={{ background:"#ede9fe", color:"#6366f1", fontSize:11 }}>✏️ Editing</span>}
+            </div>
+            {editMode ? (
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {[["Full Name","name","text"],["Phone *","phone","tel"],["Email","email","email"],["Company","company","text"]].map(([label,key,type])=>(
+                  <div key={key}>
+                    <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4, fontWeight:500 }}>{label}</label>
+                    <input type={type} value={editForm[key]||""} onChange={e=>setF(key,e.target.value)}
+                      style={{ width:"100%", borderColor: key==="phone"&&!editForm.phone?"#ef4444":"#e2e8f0" }}
+                      placeholder={key==="phone"?"+1 555 000 0000 (required for WhatsApp)":""} />
+                    {key==="phone"&&!editForm.phone&&<div style={{ fontSize:11, color:"#ef4444", marginTop:3 }}>⚠️ Phone number required to send WhatsApp</div>}
+                  </div>
+                ))}
+                <div>
+                  <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4, fontWeight:500 }}>Source</label>
+                  <select value={editForm.source} onChange={e=>setF("source",e.target.value)} style={{ width:"100%" }}>{SOURCES.map(s=><option key={s}>{s}</option>)}</select>
+                </div>
+                {isAdmin && (
+                  <div>
+                    <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4, fontWeight:500 }}>Assigned To</label>
+                    <select value={editForm.assignedTo} onChange={e=>setF("assignedTo",e.target.value)} style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select>
+                  </div>
+                )}
               </div>
+            ) : (
+              <>
+                {[["Full Name",c.name],["Phone",c.phone],["Email",c.email],["Company",c.company],["Source",c.source]].map(([k,v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f1f5f9", fontSize: 15 }}>
+                    <span style={{ color: "#64748b" }}>{k}</span>
+                    <span style={{ color: k==="Phone"&&!v?"#ef4444":"#1e293b", fontWeight: 500 }}>
+                      {k==="Phone"&&!v ? "⚠️ No phone — add to enable WhatsApp" : (v||"—")}
+                    </span>
+                  </div>
+                ))}
+                {isAdmin && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>ASSIGN TO AGENT</div>
+                    <select value={c.assignedTo} onChange={e => updateContact(c.id, { assignedTo: e.target.value })} style={{ width: "100%" }}>{TEAM_MEMBERS.map(m => <option key={m}>{m}</option>)}</select>
+                  </div>
+                )}
+              </>
             )}
           </div>
           <div className="card" style={{ padding: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 14 }}>LEAD DETAILS</div>
-            {[["Budget",c.budget],["Timeline",c.timeline],["Decision Maker",c.isDecisionMaker?"✅ Yes":"❌ No"],["Interest","⭐".repeat(c.interestLevel)]].map(([k,v]) => (
-              <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #1f2330", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#1e293b", fontWeight: 500 }}>{v||"—"}</span></div>
-            ))}
-            <div style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>UPDATE STATUS</div>
-              <select value={c.leadStatus} onChange={e => updateContact(c.id, { leadStatus: e.target.value })} style={{ width: "100%" }}>{WORKFLOW_STAGES.map(s => <option key={s}>{s}</option>)}</select>
-            </div>
+            {editMode ? (
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                <div>
+                  <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4, fontWeight:500 }}>Budget</label>
+                  <select value={editForm.budget} onChange={e=>setF("budget",e.target.value)} style={{ width:"100%" }}>{BUDGET_OPTIONS.map(b=><option key={b}>{b}</option>)}</select>
+                </div>
+                <div>
+                  <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4, fontWeight:500 }}>Timeline</label>
+                  <select value={editForm.timeline} onChange={e=>setF("timeline",e.target.value)} style={{ width:"100%" }}>{TIMELINE_OPTIONS.map(t=><option key={t}>{t}</option>)}</select>
+                </div>
+                <div>
+                  <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4, fontWeight:500 }}>Interest Level (1–5)</label>
+                  <div style={{ display:"flex", gap:8 }}>
+                    {[1,2,3,4,5].map(n=>(
+                      <button key={n} onClick={()=>setF("interestLevel",n)} style={{ flex:1, padding:"8px 0", borderRadius:8, border:`2px solid ${editForm.interestLevel>=n?"#f59e0b":"#e2e8f0"}`, background:editForm.interestLevel>=n?"#fef9c3":"transparent", cursor:"pointer", fontSize:16 }}>⭐</button>
+                    ))}
+                  </div>
+                </div>
+                <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:14, cursor:"pointer" }}>
+                  <input type="checkbox" checked={editForm.isDecisionMaker} onChange={e=>setF("isDecisionMaker",e.target.checked)} style={{ width:16, height:16, accentColor:"#6366f1" }} />
+                  <span style={{ color:"#475569" }}>Decision Maker</span>
+                </label>
+                <div style={{ marginTop:8 }}>
+                  <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4, fontWeight:500 }}>Lead Status</label>
+                  <select value={c.leadStatus} onChange={e => updateContact(c.id, { leadStatus: e.target.value })} style={{ width:"100%" }}>{WORKFLOW_STAGES.map(s=><option key={s}>{s}</option>)}</select>
+                </div>
+                <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                  <button className="btn btn-ghost" style={{ flex:1, fontSize:13 }} onClick={()=>setEditMode(false)}>Cancel</button>
+                  <button className="btn btn-primary" style={{ flex:1, fontSize:13 }} onClick={saveEdit}>💾 Save Changes</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {[["Budget",c.budget],["Timeline",c.timeline],["Decision Maker",c.isDecisionMaker?"✅ Yes":"❌ No"],["Interest","⭐".repeat(c.interestLevel)]].map(([k,v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f1f5f9", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#1e293b", fontWeight: 500 }}>{v||"—"}</span></div>
+                ))}
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>UPDATE STATUS</div>
+                  <select value={c.leadStatus} onChange={e => updateContact(c.id, { leadStatus: e.target.value })} style={{ width: "100%" }}>{WORKFLOW_STAGES.map(s => <option key={s}>{s}</option>)}</select>
+                </div>
+              </>
+            )}
           </div>
           <div className="card" style={{ padding: 20, gridColumn: "span 2" }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#64748b", marginBottom: 10 }}>NOTES</div>
@@ -1617,23 +1697,61 @@ Numbers, plain text only.`,
 function AddContactForm({ onSave, onCancel }) {
   const [form, setForm] = useState({ name:"", phone:"", email:"", company:"", source:"LinkedIn", notes:"", budget:"Unknown", timeline:"Unknown", isDecisionMaker:false, interestLevel:3, leadStatus:"New Lead", assignedTo:"Alex" });
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+  const canSave = form.name.trim() && form.phone.trim();
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+      {/* Name + Phone — top priority */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Full Name *</label><input value={form.name} onChange={e=>set("name",e.target.value)} style={{ width:"100%" }} placeholder="Jane Smith" /></div>
-        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Phone</label><input value={form.phone} onChange={e=>set("phone",e.target.value)} style={{ width:"100%" }} /></div>
-        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Email</label><input value={form.email} onChange={e=>set("email",e.target.value)} style={{ width:"100%" }} /></div>
-        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Company</label><input value={form.company} onChange={e=>set("company",e.target.value)} style={{ width:"100%" }} /></div>
-        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Source</label><select value={form.source} onChange={e=>set("source",e.target.value)} style={{ width:"100%" }}>{SOURCES.map(s=><option key={s}>{s}</option>)}</select></div>
-        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Assign To</label><select value={form.assignedTo} onChange={e=>set("assignedTo",e.target.value)} style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select></div>
-        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Budget</label><select value={form.budget} onChange={e=>set("budget",e.target.value)} style={{ width:"100%" }}>{BUDGET_OPTIONS.map(b=><option key={b}>{b}</option>)}</select></div>
-        <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Timeline</label><select value={form.timeline} onChange={e=>set("timeline",e.target.value)} style={{ width:"100%" }}>{TIMELINE_OPTIONS.map(t=><option key={t}>{t}</option>)}</select></div>
+        <div>
+          <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Full Name *</label>
+          <input value={form.name} onChange={e=>set("name",e.target.value)} style={{ width:"100%" }} placeholder="Jane Smith" />
+        </div>
+        <div>
+          <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>
+            Phone * <span style={{ color:"#25d366", fontSize:11, fontWeight:400 }}>← required for WhatsApp</span>
+          </label>
+          <input type="tel" value={form.phone} onChange={e=>set("phone",e.target.value)} style={{ width:"100%", borderColor: form.phone?"#e2e8f0":"#fca5a5" }} placeholder="+1 555 000 0000" />
+          {!form.phone && <div style={{ fontSize:11, color:"#f97316", marginTop:3 }}>Enter in international format e.g. +44 7700 123456</div>}
+        </div>
       </div>
-      <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:15, cursor:"pointer" }}><input type="checkbox" checked={form.isDecisionMaker} onChange={e=>set("isDecisionMaker",e.target.checked)} style={{ width:16, height:16 }} /><span style={{ color:"#64748b" }}>Decision Maker</span></label>
-      <div><label style={{ fontSize:14, color:"#64748b", display:"block", marginBottom:4 }}>Notes</label><textarea value={form.notes} onChange={e=>set("notes",e.target.value)} style={{ width:"100%", minHeight:70, resize:"none", background:"#f8fafc" }} /></div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+        <div>
+          <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Email</label>
+          <input value={form.email} onChange={e=>set("email",e.target.value)} style={{ width:"100%" }} placeholder="jane@company.com" />
+        </div>
+        <div>
+          <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Company</label>
+          <input value={form.company} onChange={e=>set("company",e.target.value)} style={{ width:"100%" }} placeholder="Acme Capital" />
+        </div>
+        <div>
+          <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Source</label>
+          <select value={form.source} onChange={e=>set("source",e.target.value)} style={{ width:"100%" }}>{SOURCES.map(s=><option key={s}>{s}</option>)}</select>
+        </div>
+        <div>
+          <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Assign To</label>
+          <select value={form.assignedTo} onChange={e=>set("assignedTo",e.target.value)} style={{ width:"100%" }}>{TEAM_MEMBERS.map(m=><option key={m}>{m}</option>)}</select>
+        </div>
+        <div>
+          <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Budget</label>
+          <select value={form.budget} onChange={e=>set("budget",e.target.value)} style={{ width:"100%" }}>{BUDGET_OPTIONS.map(b=><option key={b}>{b}</option>)}</select>
+        </div>
+        <div>
+          <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Timeline</label>
+          <select value={form.timeline} onChange={e=>set("timeline",e.target.value)} style={{ width:"100%" }}>{TIMELINE_OPTIONS.map(t=><option key={t}>{t}</option>)}</select>
+        </div>
+      </div>
+      <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:14, cursor:"pointer" }}>
+        <input type="checkbox" checked={form.isDecisionMaker} onChange={e=>set("isDecisionMaker",e.target.checked)} style={{ width:16, height:16, accentColor:"#6366f1" }} />
+        <span style={{ color:"#475569" }}>Decision Maker</span>
+      </label>
+      <div>
+        <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5, fontWeight:500 }}>Notes</label>
+        <textarea value={form.notes} onChange={e=>set("notes",e.target.value)} style={{ width:"100%", minHeight:70, resize:"none", background:"#f8fafc" }} placeholder="Initial notes about this lead…" />
+      </div>
+      {!canSave && <div style={{ fontSize:12, color:"#f97316", padding:"8px 12px", background:"#fff7ed", borderRadius:8, border:"1px solid #fed7aa" }}>⚠️ Name and phone number are required to save a contact</div>}
       <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
         <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
-        <button className="btn btn-primary" onClick={()=>{if(form.name.trim())onSave(form);}}>Save Contact</button>
+        <button className="btn btn-primary" style={{ opacity:canSave?1:0.5 }} onClick={()=>{ if(canSave) onSave(form); }}>Save Contact</button>
       </div>
     </div>
   );
