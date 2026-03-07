@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ─── USERS ─────────────────────────────────────────────────────────────────────
 // To change PINs, edit here. Admin PIN: 0000
@@ -78,11 +78,41 @@ const BASE_STYLES = `
 // ─── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [contacts, setContacts] = useState(SAMPLE_CONTACTS);
-  const [waConfig, setWaConfig] = useState({
-    accessToken: "",
-    agents: Object.fromEntries(TEAM_MEMBERS.map(m => [m, { phoneNumberId:"", number:"", displayName:m }]))
+
+  // Load contacts from localStorage, fall back to sample data
+  const [contacts, setContacts] = useState(() => {
+    try {
+      const saved = localStorage.getItem("clearcrm_contacts");
+      return saved ? JSON.parse(saved) : SAMPLE_CONTACTS;
+    } catch { return SAMPLE_CONTACTS; }
   });
+
+  // Load waConfig from localStorage
+  const [waConfig, setWaConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem("clearcrm_waconfig");
+      return saved ? JSON.parse(saved) : {
+        accessToken: "",
+        agents: Object.fromEntries(TEAM_MEMBERS.map(m => [m, { phoneNumberId:"", number:"", displayName:m }]))
+      };
+    } catch {
+      return {
+        accessToken: "",
+        agents: Object.fromEntries(TEAM_MEMBERS.map(m => [m, { phoneNumberId:"", number:"", displayName:m }]))
+      };
+    }
+  });
+
+  // Auto-save contacts whenever they change
+  useEffect(() => {
+    try { localStorage.setItem("clearcrm_contacts", JSON.stringify(contacts)); } catch {}
+  }, [contacts]);
+
+  // Auto-save waConfig whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem("clearcrm_waconfig", JSON.stringify(waConfig)); } catch {}
+  }, [waConfig]);
+
   if (!currentUser) return <LoginScreen onLogin={setCurrentUser} />;
   return currentUser.role === "admin"
     ? <AdminApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} />
@@ -1085,6 +1115,42 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
                     <span style={{ color:c, fontWeight:700, fontFamily:"DM Mono,monospace" }}>{v}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Data management */}
+            <div className="card" style={{ padding:24 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
+                <div style={{ width:36, height:36, background:"#f1f5f9", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>💾</div>
+                <div>
+                  <div style={{ fontSize:15, fontWeight:700 }}>Data & Storage</div>
+                  <div style={{ fontSize:13, color:"#64748b" }}>All contacts and settings are automatically saved to your browser</div>
+                </div>
+                <div style={{ marginLeft:"auto", padding:"6px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, fontSize:13, color:"#16a34a", fontWeight:600 }}>
+                  ✅ Auto-save ON
+                </div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <div style={{ padding:"14px 16px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#1e293b", marginBottom:4 }}>📇 Contacts saved</div>
+                  <div style={{ fontSize:24, fontWeight:800, color:"#6366f1" }}>{contacts.length}</div>
+                  <div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>Persists across page refreshes</div>
+                </div>
+                <div style={{ padding:"14px 16px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10 }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#1e293b", marginBottom:4 }}>🔑 WA Config saved</div>
+                  <div style={{ fontSize:24, fontWeight:800, color:"#10b981" }}>{Object.values(waConfig.agents||{}).filter(a=>a.phoneNumberId).length}/{TEAM_MEMBERS.length}</div>
+                  <div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>Agents configured</div>
+                </div>
+              </div>
+              <div style={{ marginTop:16, padding:"12px 16px", background:"#fff7ed", border:"1px solid #fed7aa", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#92400e" }}>⚠️ Reset to sample data</div>
+                  <div style={{ fontSize:12, color:"#b45309" }}>Clears all contacts and replaces with demo data. WA settings are kept.</div>
+                </div>
+                <button className="btn btn-ghost" style={{ fontSize:12, color:"#ef4444", borderColor:"#fecaca", whiteSpace:"nowrap" }}
+                  onClick={()=>{ if(window.confirm("Reset all contacts to sample data? This cannot be undone.")){ setContacts(SAMPLE_CONTACTS); notify("↩️ Reset to sample data"); } }}>
+                  Reset Contacts
+                </button>
               </div>
             </div>
           </div>
