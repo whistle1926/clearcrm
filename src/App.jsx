@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ─── USERS ─────────────────────────────────────────────────────────────────────
 // To change PINs, edit here. Admin PIN: 0000
@@ -619,6 +619,7 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
   const [filterCategory, setFilterCategory] = useState("All");
   const [filterAssigned, setFilterAssigned] = useState("All");
   const [showAddContact, setShowAddContact] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
   const [showWAModal, setShowWAModal] = useState(null);
   const [waMessage, setWaMessage] = useState("");
   const [sortField, setSortField] = useState("score");
@@ -833,7 +834,7 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
               <div><h1 style={{ fontSize:22, fontWeight:700 }}>All Contacts</h1><p style={{ color:"#64748b", fontSize:14, marginTop:2 }}>{filtered.length} of {contacts.length} records</p></div>
               <div style={{ display:"flex", gap:10 }}>
-                <button className="btn btn-ghost" onClick={() => setShowAddContact(true)}>⬆️ Import CSV</button>
+                <button className="btn btn-ghost" onClick={() => setShowCSVImport(true)}>⬆️ Import CSV</button>
                 <button className="btn btn-primary" onClick={() => setShowAddContact(true)}>+ Add Contact</button>
               </div>
             </div>
@@ -1171,12 +1172,10 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
             }} onCancel={()=>setShowAddContact(false)} />
           </div>
         </div>
-      )}
+      {showCSVImport && <CSVImportModal onImport={(newContacts) => { setContacts(prev => [...prev, ...newContacts]); setShowCSVImport(false); notify(`✅ Imported ${newContacts.length} contacts!`); }} onClose={() => setShowCSVImport(false)} />}
     </div>
   );
 }
-
-// ─── AGENT APP ─────────────────────────────────────────────────────────────────
 function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1870,6 +1869,209 @@ Numbers, plain text only.`,
   );
 }
 
+
+// ─── CSV IMPORT MODAL ──────────────────────────────────────────────────────────
+const CSV_TEMPLATE_HEADERS = ["name","phone","email","company","source","budget","timeline","isDecisionMaker","interestLevel","leadStatus","assignedTo","notes"];
+const CSV_TEMPLATE_SAMPLE = [
+  ["Paddy Farren","+353861234567","paddy@example.com","Farren Capital","LinkedIn","500k+","1 month","true","5","New Lead","Alex","Referred by David. Very interested."],
+  ["Sarah O'Brien","+447700900123","sarah@obrien.io","O'Brien Investments","Referral","100k-500k","3 months","false","3","Contacted","Jamie","Warm lead from event."],
+  ["James Murphy","+1 555 010 0200","james@murphy.com","Murphy Fund","Cold Call","10k-50k","6 months","true","2","New Lead","Sam","Early stage, needs nurturing."],
+];
+
+function CSVImportModal({ onImport, onClose }) {
+  const [step, setStep] = useState("choose"); // choose | preview | done
+  const [rows, setRows] = useState([]);
+  const [errors, setErrors] = useState([]);
+  const [fileName, setFileName] = useState("");
+  const fileRef = useRef(null);
+
+  const downloadTemplate = () => {
+    const csv = [CSV_TEMPLATE_HEADERS, ...CSV_TEMPLATE_SAMPLE].map(r => r.map(v => `"${v}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type:"text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "clearcrm_import_template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const parseCSV = (text) => {
+    const lines = text.trim().split("\n").filter(l => l.trim());
+    if (lines.length < 2) return { rows:[], errors:["File appears empty — need at least a header row and one data row."] };
+    const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g,"").trim().toLowerCase());
+    const errs = [];
+    const parsed = [];
+    lines.slice(1).forEach((line, i) => {
+      const vals = [];
+      let inQ = false, cur = "";
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ""; }
+        else cur += ch;
+      }
+      vals.push(cur.trim());
+      const row = {};
+      headers.forEach((h, idx) => { row[h] = (vals[idx] || "").replace(/^"|"$/g,"").trim(); });
+      if (!row.name) { errs.push(`Row ${i+2}: missing name — skipped`); return; }
+      if (!row.phone) { errs.push(`Row ${i+2} (${row.name}): missing phone — skipped`); return; }
+      parsed.push({
+        id: Date.now() + i,
+        name: row.name || "",
+        phone: row.phone || "",
+        email: row.email || "",
+        company: row.company || "",
+        source: SOURCES.includes(row.source) ? row.source : "Other",
+        budget: BUDGET_OPTIONS.includes(row.budget) ? row.budget : "Unknown",
+        timeline: TIMELINE_OPTIONS.includes(row.timeline) ? row.timeline : "Unknown",
+        isDecisionMaker: row.isdecisionmaker === "true" || row.isdecisionmaker === "yes" || row.isdecisionmaker === "1",
+        interestLevel: Math.min(5, Math.max(1, parseInt(row.interestlevel) || 3)),
+        leadStatus: WORKFLOW_STAGES.includes(row.leadstatus) ? row.leadstatus : "New Lead",
+        assignedTo: TEAM_MEMBERS.includes(row.assignedto) ? row.assignedto : TEAM_MEMBERS[0],
+        notes: row.notes || "",
+        score: 40, category: "C",
+        scoreBreakdown: { budget:10, timeline:10, responsiveness:8, decisionMaker:10, engagement:7 },
+        callStatus: null, callDate: null, callTime: null, timezone: "", meetingLink: "", callNotes: "",
+        whatsappHistory: []
+      });
+    });
+    return { rows: parsed, errors: errs };
+  };
+
+  const handleFile = (file) => {
+    if (!file) return;
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = e => {
+      const { rows: parsed, errors: errs } = parseCSV(e.target.result);
+      setRows(parsed); setErrors(errs);
+      setStep("preview");
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth:620, maxHeight:"85vh", overflow:"auto" }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <div>
+            <div style={{ fontSize:17, fontWeight:700 }}>Import Contacts from CSV</div>
+            <div style={{ fontSize:13, color:"#64748b" }}>Upload a spreadsheet to bulk-add contacts</div>
+          </div>
+          <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={onClose}>✕</button>
+        </div>
+
+        {step === "choose" && (
+          <div>
+            {/* Step 1 — download template */}
+            <div style={{ padding:"16px 18px", background:"#ede9fe", border:"1px solid #c4b5fd", borderRadius:12, marginBottom:16 }}>
+              <div style={{ fontSize:14, fontWeight:700, color:"#5b21b6", marginBottom:6 }}>Step 1 — Download the template</div>
+              <div style={{ fontSize:13, color:"#6d28d9", marginBottom:12 }}>Use our CSV template to make sure your data imports correctly. Fill it in Excel, Google Sheets, or Numbers.</div>
+              <button className="btn btn-primary" style={{ background:"#6366f1" }} onClick={downloadTemplate}>⬇️ Download CSV Template</button>
+            </div>
+
+            {/* Column guide */}
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:"#64748b", marginBottom:8 }}>Column reference:</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                {[
+                  ["name","Contact's full name","required"],
+                  ["phone","International format e.g. +353…","required"],
+                  ["email","Email address","optional"],
+                  ["company","Company name","optional"],
+                  ["source","LinkedIn / Referral / Cold Call / Event / Website / Other","optional"],
+                  ["budget","Under 10k / 10k-50k / 50k-100k / 100k-500k / 500k+","optional"],
+                  ["timeline","1 month / 3 months / 6 months / 12 months+ / Unknown","optional"],
+                  ["isDecisionMaker","true or false","optional"],
+                  ["interestLevel","1–5","optional"],
+                  ["leadStatus","New Lead / Contacted / Call Booked / etc.","optional"],
+                  ["assignedTo","Alex / Jamie / Sam / Jordan","optional"],
+                  ["notes","Free text notes","optional"],
+                ].map(([col, desc, req]) => (
+                  <div key={col} style={{ display:"flex", gap:8, padding:"8px 10px", background:"#f8fafc", borderRadius:8, border:"1px solid #e2e8f0", fontSize:12 }}>
+                    <span style={{ fontFamily:"DM Mono,monospace", color:"#6366f1", fontWeight:600, minWidth:100 }}>{col}</span>
+                    <span style={{ color:"#64748b", flex:1 }}>{desc}</span>
+                    <span style={{ color:req==="required"?"#ef4444":"#94a3b8", fontSize:11, fontWeight:600 }}>{req}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Step 2 — upload */}
+            <div style={{ padding:"16px 18px", background:"#f0fdf4", border:"2px dashed #86efac", borderRadius:12, marginBottom:16, textAlign:"center", cursor:"pointer" }}
+              onClick={()=>fileRef.current?.click()}
+              onDragOver={e=>e.preventDefault()}
+              onDrop={e=>{ e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}>
+              <div style={{ fontSize:28, marginBottom:8 }}>📂</div>
+              <div style={{ fontSize:14, fontWeight:600, color:"#166534", marginBottom:4 }}>Step 2 — Upload your CSV</div>
+              <div style={{ fontSize:13, color:"#16a34a" }}>Click to browse or drag & drop your .csv file here</div>
+              <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display:"none" }} onChange={e=>handleFile(e.target.files[0])} />
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end" }}>
+              <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {step === "preview" && (
+          <div>
+            <div style={{ padding:"10px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, marginBottom:14, display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ fontSize:20 }}>📄</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"#166534" }}>{fileName}</div>
+                <div style={{ fontSize:12, color:"#16a34a" }}>{rows.length} contacts ready to import{errors.length > 0 ? `, ${errors.length} rows skipped` : ""}</div>
+              </div>
+              <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>{ setStep("choose"); setRows([]); setErrors([]); }}>← Change file</button>
+            </div>
+
+            {errors.length > 0 && (
+              <div style={{ padding:"10px 14px", background:"#fff7ed", border:"1px solid #fed7aa", borderRadius:8, marginBottom:14 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"#92400e", marginBottom:6 }}>⚠️ {errors.length} row{errors.length>1?"s":""} skipped</div>
+                {errors.map((e,i) => <div key={i} style={{ fontSize:12, color:"#b45309", marginBottom:2 }}>• {e}</div>)}
+              </div>
+            )}
+
+            {rows.length === 0 ? (
+              <div style={{ padding:"20px", textAlign:"center", color:"#ef4444", fontSize:14 }}>❌ No valid rows found. Check your file matches the template format.</div>
+            ) : (
+              <div style={{ border:"1px solid #e2e8f0", borderRadius:10, overflow:"hidden", marginBottom:16 }}>
+                <div style={{ overflowX:"auto", maxHeight:320 }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                    <thead style={{ background:"#f8fafc", position:"sticky", top:0 }}>
+                      <tr>{["Name","Phone","Email","Company","Budget","Assigned To","Status"].map(h=>(
+                        <th key={h} style={{ padding:"10px 12px", textAlign:"left", fontWeight:600, color:"#64748b", borderBottom:"1px solid #e2e8f0", whiteSpace:"nowrap" }}>{h}</th>
+                      ))}</tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r,i) => (
+                        <tr key={r.id} style={{ borderBottom:"1px solid #f1f5f9", background:i%2===0?"#fff":"#fafafa" }}>
+                          <td style={{ padding:"9px 12px", fontWeight:500 }}>{r.name}</td>
+                          <td style={{ padding:"9px 12px", fontFamily:"DM Mono,monospace", fontSize:12 }}>{r.phone}</td>
+                          <td style={{ padding:"9px 12px", color:"#64748b" }}>{r.email||"—"}</td>
+                          <td style={{ padding:"9px 12px", color:"#64748b" }}>{r.company||"—"}</td>
+                          <td style={{ padding:"9px 12px" }}>{r.budget}</td>
+                          <td style={{ padding:"9px 12px" }}><span style={{ padding:"2px 8px", background:"#ede9fe", color:"#6366f1", borderRadius:99, fontSize:12 }}>{r.assignedTo}</span></td>
+                          <td style={{ padding:"9px 12px", color:"#64748b", fontSize:12 }}>{r.leadStatus}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontSize:13, color:"#64748b" }}>Importing <strong>{rows.length}</strong> contacts</div>
+              <div style={{ display:"flex", gap:10 }}>
+                <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+                <button className="btn btn-primary" style={{ opacity:rows.length>0?1:0.4 }} onClick={()=>{ if(rows.length>0) onImport(rows); }}>
+                  ✅ Import {rows.length} Contact{rows.length!==1?"s":""}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── ADD CONTACT FORM ──────────────────────────────────────────────────────────
 function AddContactForm({ onSave, onCancel }) {
