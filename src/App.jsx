@@ -79,10 +79,14 @@ const BASE_STYLES = `
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [contacts, setContacts] = useState(SAMPLE_CONTACTS);
+  const [waConfig, setWaConfig] = useState({
+    accessToken: "",
+    agents: Object.fromEntries(TEAM_MEMBERS.map(m => [m, { phoneNumberId:"", number:"", displayName:m }]))
+  });
   if (!currentUser) return <LoginScreen onLogin={setCurrentUser} />;
   return currentUser.role === "admin"
-    ? <AdminApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} />
-    : <AgentApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} />;
+    ? <AdminApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} />
+    : <AgentApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} />;
 }
 
 // ─── LOGIN ─────────────────────────────────────────────────────────────────────
@@ -412,7 +416,7 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
 }
 
 // ─── ADMIN APP ─────────────────────────────────────────────────────────────────
-function AdminApp({ user, contacts, setContacts, onLogout }) {
+function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig }) {
   const [view, setView] = useState("dashboard");
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -424,17 +428,62 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
   const [waMessage, setWaMessage] = useState("");
   const [sortField, setSortField] = useState("score");
   const [sortDir, setSortDir] = useState("desc");
-  const [waConfig, setWaConfig] = useState({
-    accessToken: "",
-    agents: Object.fromEntries(TEAM_MEMBERS.map(m => [m, { phoneNumberId: "", number: "", displayName: m }]))
-  });
   const { notify, NotificationEl } = useNotify();
 
   const updateContact = (id, updates) => setContacts(prev => prev.map(c => c.id===id ? {...c,...updates} : c));
-  const sendWhatsApp = (contact, message) => {
-    const msg = { id: Date.now(), dir: "out", msg: message, time: new Date().toISOString().replace("T"," ").slice(0,16), status: "sent" };
+
+  const sendWhatsApp = async (contact, message) => {
+    const agentConf = waConfig.agents[contact.assignedTo] || {};
+    const phoneNumberId = agentConf.phoneNumberId;
+    const accessToken = waConfig.accessToken;
+    const recipientPhone = contact.phone.replace(/\s+/g,"").replace(/^\+/,"");
+
+    // Optimistically add message to history
+    const msgId = Date.now();
+    const msg = { id: msgId, dir:"out", msg:message, time:new Date().toISOString().replace("T"," ").slice(0,16), status:"sending" };
     updateContact(contact.id, { whatsappHistory: [...contact.whatsappHistory, msg] });
-    notify(`WhatsApp sent to ${contact.name}`);
+
+    if (!phoneNumberId || !accessToken) {
+      // No credentials — save as sent locally, warn admin
+      updateContact(contact.id, { whatsappHistory: [...contact.whatsappHistory, {...msg, status:"sent (demo)"}] });
+      notify(`⚠️ Demo mode — configure WA API in Settings to send live messages`);
+      return;
+    }
+
+    try {
+      const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: recipientPhone,
+          type: "text",
+          text: { preview_url: false, body: message }
+        })
+      });
+      const data = await res.json();
+      if (data.messages?.[0]?.id) {
+        setContacts(prev => prev.map(c => c.id===contact.id ? {
+          ...c,
+          whatsappHistory: c.whatsappHistory.map(w => w.id===msgId ? {...w, status:"delivered", waId:data.messages[0].id} : w)
+        } : c));
+        notify(`✅ WhatsApp sent to ${contact.name} via ${contact.assignedTo}'s number`);
+      } else {
+        const errMsg = data.error?.message || "Unknown error";
+        setContacts(prev => prev.map(c => c.id===contact.id ? {
+          ...c,
+          whatsappHistory: c.whatsappHistory.map(w => w.id===msgId ? {...w, status:"failed"} : w)
+        } : c));
+        notify(`❌ WA failed: ${errMsg}`);
+      }
+    } catch (err) {
+      setContacts(prev => prev.map(c => c.id===contact.id ? {
+        ...c,
+        whatsappHistory: c.whatsappHistory.map(w => w.id===msgId ? {...w, status:"failed"} : w)
+      } : c));
+      notify(`❌ Network error sending WhatsApp`);
+    }
   };
 
   const filtered = contacts.filter(c => {
@@ -751,10 +800,25 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
                         </div>
                       </div>
                       {isConfigured && (
-                        <div style={{ marginTop:12, padding:"8px 12px", background:"#fff", border:"1px solid #bbf7d0", borderRadius:8, fontSize:12, color:"#166534", display:"flex", gap:16 }}>
-                          <span>📱 <strong>{agentConf.number}</strong></span>
-                          <span>🔑 ID: <span style={{ fontFamily:"DM Mono,monospace" }}>{agentConf.phoneNumberId.slice(0,8)}…</span></span>
-                          <span>💬 Sends as: <strong>{agentConf.displayName}</strong></span>
+                        <div style={{ marginTop:12, display:"flex", gap:10, alignItems:"center" }}>
+                          <div style={{ flex:1, padding:"8px 12px", background:"#fff", border:"1px solid #bbf7d0", borderRadius:8, fontSize:12, color:"#166534", display:"flex", gap:16 }}>
+                            <span>📱 <strong>{agentConf.number}</strong></span>
+                            <span>🔑 ID: <span style={{ fontFamily:"DM Mono,monospace" }}>{agentConf.phoneNumberId.slice(0,8)}…</span></span>
+                            <span>💬 Sends as: <strong>{agentConf.displayName}</strong></span>
+                          </div>
+                          <button className="btn btn-ghost" style={{ fontSize:12, whiteSpace:"nowrap" }} onClick={async () => {
+                            notify(`🧪 Sending test to ${agentConf.number}…`);
+                            try {
+                              const res = await fetch(`https://graph.facebook.com/v19.0/${agentConf.phoneNumberId}/messages`, {
+                                method:"POST",
+                                headers:{ "Authorization":`Bearer ${waConfig.accessToken}`, "Content-Type":"application/json" },
+                                body: JSON.stringify({ messaging_product:"whatsapp", to:agentConf.number.replace(/\D/g,""), type:"text", text:{ body:`✅ ClearCRM test — ${name}'s WhatsApp is connected and working!` } })
+                              });
+                              const data = await res.json();
+                              if (data.messages?.[0]?.id) notify(`✅ Test sent to ${name} (${agentConf.number})`);
+                              else notify(`❌ Test failed: ${data.error?.message||"Check credentials"}`);
+                            } catch { notify(`❌ Network error during test`); }
+                          }}>🧪 Send Test</button>
                         </div>
                       )}
                     </div>
@@ -768,7 +832,44 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
               </div>
             </div>
 
-            {/* How it works explainer */}
+            {/* Meta Setup Checklist */}
+            <div className="card" style={{ padding:24, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:18 }}>
+                <div style={{ width:36, height:36, background:"#3b82f622", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>📋</div>
+                <div>
+                  <div style={{ fontSize:15, fontWeight:700 }}>Meta API Setup Checklist</div>
+                  <div style={{ fontSize:13, color:"#64748b" }}>Follow these steps to go live — tick each off as you complete it</div>
+                </div>
+              </div>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {[
+                  { id:"fb", label:"Create a Meta (Facebook) Business Account", link:"https://business.facebook.com", linkLabel:"business.facebook.com", note:"Use your company email. Business name: your investment firm name." },
+                  { id:"dev", label:"Create a Meta Developer App", link:"https://developers.facebook.com/apps", linkLabel:"developers.facebook.com/apps", note:"Click 'Create App' → select 'Business' type → add WhatsApp product." },
+                  { id:"verify", label:"Verify your business", link:"https://business.facebook.com/settings/security", linkLabel:"Business Verification", note:"Upload your Nevis Certificate of Incorporation or utility bill. Takes 1–3 business days." },
+                  { id:"numbers", label:"Add and verify each agent's phone number", link:"https://developers.facebook.com", linkLabel:"Meta Developer Console → WhatsApp → Phone Numbers", note:"Each number receives a verification SMS/call. Numbers can be any country." },
+                  { id:"token", label:"Generate a Permanent Access Token", link:"https://developers.facebook.com", linkLabel:"App Dashboard → System Users", note:"Create a System User, assign it to your app, generate a token with whatsapp_business_messaging permission." },
+                  { id:"test", label:"Send a test message from ClearCRM", link:null, linkLabel:null, note:"Enter your credentials above, open any contact, and send a WhatsApp. You should receive it within seconds." },
+                  { id:"webhook", label:"(Optional) Set up webhook for delivery receipts", link:"https://developers.facebook.com", linkLabel:"WhatsApp → Configuration → Webhooks", note:"Lets ClearCRM update message status from 'sent' to 'delivered' to 'read' automatically." },
+                ].map((item, i) => {
+                  const [checked, setChecked] = useState(false);
+                  return (
+                    <div key={item.id} style={{ display:"flex", gap:14, padding:"14px 16px", background:checked?"#f0fdf4":"#f8fafc", border:`1px solid ${checked?"#bbf7d0":"#e2e8f0"}`, borderRadius:10, transition:"all 0.2s" }}>
+                      <input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)} style={{ width:18, height:18, marginTop:2, accentColor:"#10b981", flexShrink:0, cursor:"pointer" }} />
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                          <span style={{ fontSize:13, fontWeight:600, color:checked?"#166534":"#1e293b", textDecoration:checked?"line-through":"none" }}>
+                            Step {i+1}: {item.label}
+                          </span>
+                          {item.link && <a href={item.link} target="_blank" rel="noreferrer" style={{ fontSize:11, color:"#6366f1", textDecoration:"none", background:"#ede9fe", padding:"2px 8px", borderRadius:99 }}>↗ {item.linkLabel}</a>}
+                        </div>
+                        <div style={{ fontSize:12, color:checked?"#16a34a":"#64748b" }}>{item.note}</div>
+                      </div>
+                      {checked && <span style={{ fontSize:18, flexShrink:0 }}>✅</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             <div className="card" style={{ padding:24, marginBottom:20 }}>
               <div style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>📋 How Per-Agent WhatsApp Works</div>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:16 }}>
@@ -825,7 +926,7 @@ function AdminApp({ user, contacts, setContacts, onLogout }) {
 }
 
 // ─── AGENT APP ─────────────────────────────────────────────────────────────────
-function AgentApp({ user, contacts, setContacts, onLogout }) {
+function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -847,10 +948,37 @@ function AgentApp({ user, contacts, setContacts, onLogout }) {
   const hotLeads = myLeads.filter(c => c.category==="A");
 
   const updateContact = (id, updates) => setContacts(prev=>prev.map(c=>c.id===id?{...c,...updates}:c));
-  const sendWhatsApp = (contact, message) => {
-    const msg = { id:Date.now(), dir:"out", msg:message, time:new Date().toISOString().replace("T"," ").slice(0,16), status:"sent" };
+  const sendWhatsApp = async (contact, message) => {
+    const agentConf = waConfig?.agents?.[user.name] || {};
+    const phoneNumberId = agentConf.phoneNumberId;
+    const accessToken = waConfig?.accessToken;
+    const recipientPhone = contact.phone.replace(/\s+/g,"").replace(/^\+/,"");
+    const msgId = Date.now();
+    const msg = { id:msgId, dir:"out", msg:message, time:new Date().toISOString().replace("T"," ").slice(0,16), status:"sending" };
     updateContact(contact.id, { whatsappHistory:[...contact.whatsappHistory, msg] });
-    notify(`WhatsApp sent to ${contact.name}`);
+    if (!phoneNumberId || !accessToken) {
+      updateContact(contact.id, { whatsappHistory:[...contact.whatsappHistory, {...msg, status:"sent (demo)"}] });
+      notify(`⚠️ Demo mode — admin needs to configure your WA number in Settings`);
+      return;
+    }
+    try {
+      const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+        method:"POST",
+        headers:{ "Authorization":`Bearer ${accessToken}`, "Content-Type":"application/json" },
+        body: JSON.stringify({ messaging_product:"whatsapp", recipient_type:"individual", to:recipientPhone, type:"text", text:{ preview_url:false, body:message } })
+      });
+      const data = await res.json();
+      if (data.messages?.[0]?.id) {
+        setContacts(prev=>prev.map(c=>c.id===contact.id?{...c,whatsappHistory:c.whatsappHistory.map(w=>w.id===msgId?{...w,status:"delivered",waId:data.messages[0].id}:w)}:c));
+        notify(`✅ Sent to ${contact.name}`);
+      } else {
+        setContacts(prev=>prev.map(c=>c.id===contact.id?{...c,whatsappHistory:c.whatsappHistory.map(w=>w.id===msgId?{...w,status:"failed"}:w)}:c));
+        notify(`❌ Failed: ${data.error?.message||"Unknown error"}`);
+      }
+    } catch {
+      setContacts(prev=>prev.map(c=>c.id===contact.id?{...c,whatsappHistory:c.whatsappHistory.map(w=>w.id===msgId?{...w,status:"failed"}:w)}:c));
+      notify(`❌ Network error`);
+    }
   };
 
   if (selectedContact) {
