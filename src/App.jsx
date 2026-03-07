@@ -418,6 +418,7 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
 // ─── ADMIN APP ─────────────────────────────────────────────────────────────────
 function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig }) {
   const [view, setView] = useState("dashboard");
+  const [checklist, setChecklist] = useState({ fb:false, dev:false, verify:false, numbers:false, token:false, test:false, webhook:false });
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -851,10 +852,10 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
                   { id:"test", label:"Send a test message from ClearCRM", link:null, linkLabel:null, note:"Enter your credentials above, open any contact, and send a WhatsApp. You should receive it within seconds." },
                   { id:"webhook", label:"(Optional) Set up webhook for delivery receipts", link:"https://developers.facebook.com", linkLabel:"WhatsApp → Configuration → Webhooks", note:"Lets ClearCRM update message status from 'sent' to 'delivered' to 'read' automatically." },
                 ].map((item, i) => {
-                  const [checked, setChecked] = useState(false);
+                  const checked = checklist[item.id] || false;
                   return (
                     <div key={item.id} style={{ display:"flex", gap:14, padding:"14px 16px", background:checked?"#f0fdf4":"#f8fafc", border:`1px solid ${checked?"#bbf7d0":"#e2e8f0"}`, borderRadius:10, transition:"all 0.2s" }}>
-                      <input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)} style={{ width:18, height:18, marginTop:2, accentColor:"#10b981", flexShrink:0, cursor:"pointer" }} />
+                      <input type="checkbox" checked={checked} onChange={e=>setChecklist(p=>({...p,[item.id]:e.target.checked}))} style={{ width:18, height:18, marginTop:2, accentColor:"#10b981", flexShrink:0, cursor:"pointer" }} />
                       <div style={{ flex:1 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
                           <span style={{ fontSize:13, fontWeight:600, color:checked?"#166534":"#1e293b", textDecoration:checked?"line-through":"none" }}>
