@@ -486,85 +486,93 @@ function validatePhone(phone) {
 
 function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
   const validation = validatePhone(contact.phone);
-  const [confirmed, setConfirmed] = useState(false);
+  const [mode, setMode] = useState("template");
+  const isFirstContact = !contact.whatsappHistory || contact.whatsappHistory.length === 0;
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+      <div className="modal" style={{ maxWidth:520 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16 }}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>Send WhatsApp</div>
-            <div style={{ fontSize: 14, color: "#64748b" }}>to {contact.name}</div>
+            <div style={{ fontSize:17, fontWeight:700 }}>Send WhatsApp</div>
+            <div style={{ fontSize:14, color:"#64748b" }}>to {contact.name}</div>
           </div>
-          <button className="btn btn-ghost" style={{ padding: "4px 10px" }} onClick={onClose}>✕</button>
+          <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={onClose}>✕</button>
         </div>
 
-        {/* Phone number status banner */}
         {!validation.valid ? (
-          <div style={{ padding:"14px 16px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10, marginBottom:16 }}>
-            <div style={{ fontSize:14, fontWeight:600, color:"#dc2626", marginBottom:4 }}>❌ Cannot send — number issue</div>
-            <div style={{ fontSize:13, color:"#7f1d1d", marginBottom:10 }}>{validation.issue}</div>
-            <div style={{ fontSize:12, color:"#dc2626" }}>Current number: <strong style={{ fontFamily:"DM Mono,monospace" }}>{contact.phone || "(none)"}</strong></div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:6 }}>Go to Overview → ✏️ Edit to fix the number, then try again.</div>
-          </div>
-        ) : (
-          <div style={{ padding:"10px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:10, marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
-            <span style={{ fontSize:18 }}>✅</span>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:"#166534" }}>Number looks valid</div>
-              <div style={{ fontSize:12, color:"#16a34a", fontFamily:"DM Mono,monospace" }}>{contact.phone}</div>
-            </div>
-            <div style={{ marginLeft:"auto", fontSize:11, color:"#64748b", textAlign:"right" }}>
-              <div>Format: ✓ international</div>
-              <div>Length: ✓ {contact.phone.replace(/\D/g,"").length} digits</div>
-            </div>
-          </div>
-        )}
-
-        {validation.valid && (
           <>
-            {/* First-contact warning */}
-            {!confirmed && (
-              <div style={{ padding:"10px 14px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:10, marginBottom:14, fontSize:13 }}>
-                <div style={{ fontWeight:600, color:"#92400e", marginBottom:4 }}>⚠️ Confirm before sending</div>
-                <div style={{ color:"#78350f", marginBottom:6 }}>Meta only allows free-form messages to numbers that have previously messaged you, <strong>unless</strong> you're using Meta's test number (+1 555 161 4303) — in that case tick below and send freely.</div>
-                <div style={{ color:"#78350f", marginBottom:8 }}>For live numbers doing cold outreach, the recipient must first message your WhatsApp number, or you need a pre-approved template.</div>
-                <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
-                  <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} style={{ accentColor:"#f59e0b" }} />
-                  <span style={{ color:"#92400e", fontWeight:500 }}>This contact has previously messaged us / using test number / I understand</span>
-                </label>
-              </div>
-            )}
-            {confirmed && (
-              <div style={{ padding:"8px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, marginBottom:14, fontSize:12, color:"#16a34a" }}>
-                ✅ Confirmed — sending as free-form message
-              </div>
-            )}
-
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 14, color: "#64748b", marginBottom: 8 }}>Quick Templates</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {Object.entries(WA_TEMPLATES).map(([key]) => (
-                  <button key={key} className="btn btn-ghost" style={{ fontSize: 13, padding: "6px 12px" }} onClick={() => setWaMessage(fillTemplate(WA_TEMPLATES[key], contact))}>{key.replace(/_/g," ")}</button>
-                ))}
-              </div>
+            <div style={{ padding:"14px 16px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10, marginBottom:16 }}>
+              <div style={{ fontSize:14, fontWeight:600, color:"#dc2626", marginBottom:4 }}>❌ Cannot send — number issue</div>
+              <div style={{ fontSize:13, color:"#7f1d1d", marginBottom:6 }}>{validation.issue}</div>
+              <div style={{ fontSize:12, color:"#9ca3af" }}>Go to Overview → ✏️ Edit to fix the number first.</div>
             </div>
-            <textarea value={waMessage} onChange={e => setWaMessage(e.target.value)} style={{ width: "100%", minHeight: 120, resize: "vertical", marginBottom: 14, background: "#f8fafc" }} placeholder="Type your message…" />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-              <button className="btn btn-green"
-                style={{ opacity: (waMessage.trim() && confirmed) ? 1 : 0.5 }}
-                onClick={() => { if (waMessage.trim() && confirmed) { onSend(); onClose(); } }}>
-                Send Message ✓
-              </button>
+            <div style={{ display:"flex", justifyContent:"flex-end" }}>
+              <button className="btn btn-ghost" onClick={onClose}>Close</button>
             </div>
           </>
-        )}
+        ) : (
+          <>
+            <div style={{ padding:"8px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, marginBottom:14, display:"flex", alignItems:"center", gap:10 }}>
+              <span>✅</span>
+              <span style={{ fontSize:13, color:"#16a34a", fontFamily:"DM Mono,monospace", fontWeight:600 }}>{contact.phone}</span>
+              <span style={{ fontSize:11, color:"#64748b", marginLeft:"auto" }}>{isFirstContact ? "🆕 First contact" : "💬 Existing conversation"}</span>
+            </div>
 
-        {!validation.valid && (
-          <div style={{ display:"flex", justifyContent:"flex-end" }}>
-            <button className="btn btn-ghost" onClick={onClose}>Close</button>
-          </div>
+            {/* Mode switcher */}
+            <div style={{ display:"flex", marginBottom:16, border:"1px solid #e2e8f0", borderRadius:10, overflow:"hidden" }}>
+              {[["template","📋 Template (first contact)"],["freeform","✏️ Free-form (existing)"]].map(([m,label])=>(
+                <button key={m} onClick={()=>{ setMode(m); setWaMessage(""); }} style={{ flex:1, padding:"10px 0", fontSize:13, fontWeight:600, border:"none", borderLeft:m==="freeform"?"1px solid #e2e8f0":"none", cursor:"pointer", background:mode===m?"#6366f1":"#fff", color:mode===m?"#fff":"#64748b", transition:"all 0.15s" }}>{label}</button>
+              ))}
+            </div>
+
+            {mode === "template" && (
+              <div>
+                <div style={{ padding:"10px 14px", background:"#ede9fe", border:"1px solid #c4b5fd", borderRadius:8, marginBottom:14, fontSize:13, color:"#5b21b6" }}>
+                  <strong>Required for first contact & cold outreach.</strong> Meta only accepts pre-approved templates to open a conversation. Select one below and send — the contact will receive it on their WhatsApp immediately.
+                </div>
+                <div style={{ fontSize:13, fontWeight:600, color:"#64748b", marginBottom:10 }}>Available templates:</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+                  {[{ name:"hello_world", lang:"en_US", label:"👋 Hello World", desc:'Sends: "Hello World" — Meta\'s built-in test template, always works on test numbers' }].map(t=>(
+                    <div key={t.name} onClick={()=>setWaMessage(`__TEMPLATE__${t.name}__${t.lang}`)}
+                      style={{ padding:"12px 14px", border:`2px solid ${waMessage===`__TEMPLATE__${t.name}__${t.lang}`?"#6366f1":"#e2e8f0"}`, borderRadius:10, cursor:"pointer", background:waMessage===`__TEMPLATE__${t.name}__${t.lang}`?"#ede9fe":"#f8fafc" }}>
+                      <div style={{ fontSize:14, fontWeight:600 }}>{t.label}</div>
+                      <div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>{t.desc}</div>
+                      <div style={{ fontSize:11, color:"#94a3b8", marginTop:4, fontFamily:"DM Mono,monospace" }}>name: {t.name} · language: {t.lang}</div>
+                    </div>
+                  ))}
+                  <div style={{ padding:"10px 12px", background:"#f8fafc", border:"1px dashed #e2e8f0", borderRadius:8, fontSize:12, color:"#94a3b8" }}>
+                    + Custom approved templates appear here once added in Meta Business Suite → WhatsApp Manager → Message Templates (~24hr approval)
+                  </div>
+                </div>
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+                  <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+                  <button className="btn btn-primary" style={{ opacity:waMessage.startsWith("__TEMPLATE__")?1:0.4 }}
+                    onClick={()=>{ if(waMessage.startsWith("__TEMPLATE__")){ onSend(); onClose(); } }}>Send Template ✓</button>
+                </div>
+              </div>
+            )}
+
+            {mode === "freeform" && (
+              <div>
+                <div style={{ padding:"10px 14px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, marginBottom:14, fontSize:13, color:"#92400e" }}>
+                  ⚠️ Only works within <strong>24hrs</strong> of the contact last messaging you. Use Template mode for cold outreach.
+                </div>
+                <div style={{ fontSize:13, color:"#64748b", marginBottom:8 }}>Quick Templates</div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:10 }}>
+                  {Object.entries(WA_TEMPLATES).map(([key])=>(
+                    <button key={key} className="btn btn-ghost" style={{ fontSize:12, padding:"5px 10px" }} onClick={()=>setWaMessage(fillTemplate(WA_TEMPLATES[key], contact))}>{key.replace(/_/g," ")}</button>
+                  ))}
+                </div>
+                <textarea value={waMessage.startsWith("__TEMPLATE__")?"":waMessage} onChange={e=>setWaMessage(e.target.value)} style={{ width:"100%", minHeight:110, resize:"vertical", marginBottom:14, background:"#f8fafc" }} placeholder="Type your message…" />
+                <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+                  <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+                  <button className="btn btn-green" style={{ opacity:(waMessage.trim()&&!waMessage.startsWith("__TEMPLATE__"))?1:0.4 }}
+                    onClick={()=>{ if(waMessage.trim()&&!waMessage.startsWith("__TEMPLATE__")){ onSend(); onClose(); } }}>Send Message ✓</button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -608,16 +616,29 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
     }
 
     try {
-      const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const isTemplate = message.startsWith("__TEMPLATE__");
+      let body;
+      if (isTemplate) {
+        const [,templateName, templateLang] = message.split("__").filter(Boolean);
+        body = JSON.stringify({
+          messaging_product: "whatsapp",
+          to: recipientPhone,
+          type: "template",
+          template: { name: templateName, language: { code: templateLang } }
+        });
+      } else {
+        body = JSON.stringify({
           messaging_product: "whatsapp",
           recipient_type: "individual",
           to: recipientPhone,
           type: "text",
           text: { preview_url: false, body: message }
-        })
+        });
+      }
+      const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body
       });
       const data = await res.json();
       if (data.messages?.[0]?.id) {
@@ -1126,10 +1147,18 @@ function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
       return;
     }
     try {
+      const isTemplate = message.startsWith("__TEMPLATE__");
+      let reqBody;
+      if (isTemplate) {
+        const [,templateName, templateLang] = message.split("__").filter(Boolean);
+        reqBody = JSON.stringify({ messaging_product:"whatsapp", to:recipientPhone, type:"template", template:{ name:templateName, language:{ code:templateLang } } });
+      } else {
+        reqBody = JSON.stringify({ messaging_product:"whatsapp", recipient_type:"individual", to:recipientPhone, type:"text", text:{ preview_url:false, body:message } });
+      }
       const res = await fetch(`https://graph.facebook.com/v19.0/${phoneNumberId}/messages`, {
         method:"POST",
         headers:{ "Authorization":`Bearer ${accessToken}`, "Content-Type":"application/json" },
-        body: JSON.stringify({ messaging_product:"whatsapp", recipient_type:"individual", to:recipientPhone, type:"text", text:{ preview_url:false, body:message } })
+        body: reqBody
       });
       const data = await res.json();
       if (data.messages?.[0]?.id) {
