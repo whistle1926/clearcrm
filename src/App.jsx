@@ -469,27 +469,102 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
 }
 
 // ─── WA MODAL ─────────────────────────────────────────────────────────────────
+// ─── PHONE VALIDATOR ───────────────────────────────────────────────────────────
+function validatePhone(phone) {
+  if (!phone) return { valid: false, issue: "No phone number saved for this contact." };
+  const cleaned = phone.replace(/\s+/g,"").replace(/-/g,"");
+  if (!cleaned.startsWith("+")) return { valid: false, issue: "Number must start with + and country code (e.g. +353 for Ireland, +1 for US/Canada, +44 for UK)." };
+  const digits = cleaned.replace(/\D/g,"");
+  if (digits.length < 7) return { valid: false, issue: "Number is too short — check it's correct." };
+  if (digits.length > 15) return { valid: false, issue: "Number is too long — check it's correct." };
+  // Common country code checks
+  const knownCodes = ["1","7","20","27","30","31","32","33","34","36","39","40","41","43","44","45","46","47","48","49","51","52","53","54","55","56","57","58","60","61","62","63","64","65","66","81","82","84","86","90","91","92","93","94","95","98","212","213","216","218","220","221","222","223","224","225","226","227","228","229","230","231","232","233","234","235","236","237","238","239","240","241","242","243","244","245","246","247","248","249","250","251","252","253","254","255","256","257","258","260","261","262","263","264","265","266","267","268","269","290","291","297","298","299","350","351","352","353","354","355","356","357","358","359","370","371","372","373","374","375","376","377","378","380","381","382","385","386","387","389","420","421","423","500","501","502","503","504","505","506","507","508","509","590","591","592","593","594","595","596","597","598","599","670","672","673","674","675","676","677","678","679","680","681","682","683","685","686","687","688","689","690","691","692","850","852","853","855","856","880","886","960","961","962","963","964","965","966","967","968","970","971","972","973","974","975","976","977","992","993","994","995","996","998"];
+  const hasValidCode = knownCodes.some(code => digits.startsWith(code));
+  if (!hasValidCode) return { valid: false, issue: "Country code not recognised. Make sure the number starts with your country's dialling code after the +." };
+  return { valid: true, issue: null, cleaned };
+}
+
 function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
+  const validation = validatePhone(contact.phone);
+  const [confirmed, setConfirmed] = useState(false);
+
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-          <div><div style={{ fontSize: 17, fontWeight: 700 }}>Send WhatsApp</div><div style={{ fontSize: 14, color: "#64748b" }}>to {contact.name} · {contact.phone}</div></div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>Send WhatsApp</div>
+            <div style={{ fontSize: 14, color: "#64748b" }}>to {contact.name}</div>
+          </div>
           <button className="btn btn-ghost" style={{ padding: "4px 10px" }} onClick={onClose}>✕</button>
         </div>
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, color: "#64748b", marginBottom: 8 }}>Quick Templates</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {Object.entries(WA_TEMPLATES).map(([key]) => (
-              <button key={key} className="btn btn-ghost" style={{ fontSize: 13, padding: "6px 12px" }} onClick={() => setWaMessage(fillTemplate(WA_TEMPLATES[key], contact))}>{key.replace(/_/g," ")}</button>
-            ))}
+
+        {/* Phone number status banner */}
+        {!validation.valid ? (
+          <div style={{ padding:"14px 16px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10, marginBottom:16 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:"#dc2626", marginBottom:4 }}>❌ Cannot send — number issue</div>
+            <div style={{ fontSize:13, color:"#7f1d1d", marginBottom:10 }}>{validation.issue}</div>
+            <div style={{ fontSize:12, color:"#dc2626" }}>Current number: <strong style={{ fontFamily:"DM Mono,monospace" }}>{contact.phone || "(none)"}</strong></div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:6 }}>Go to Overview → ✏️ Edit to fix the number, then try again.</div>
           </div>
-        </div>
-        <textarea value={waMessage} onChange={e => setWaMessage(e.target.value)} style={{ width: "100%", minHeight: 120, resize: "vertical", marginBottom: 14, background: "#f8fafc" }} placeholder="Type your message…" />
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-green" onClick={() => { if (waMessage.trim()) { onSend(); onClose(); } }}>Send Message ✓</button>
-        </div>
+        ) : (
+          <div style={{ padding:"10px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:10, marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:18 }}>✅</span>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:"#166534" }}>Number looks valid</div>
+              <div style={{ fontSize:12, color:"#16a34a", fontFamily:"DM Mono,monospace" }}>{contact.phone}</div>
+            </div>
+            <div style={{ marginLeft:"auto", fontSize:11, color:"#64748b", textAlign:"right" }}>
+              <div>Format: ✓ international</div>
+              <div>Length: ✓ {contact.phone.replace(/\D/g,"").length} digits</div>
+            </div>
+          </div>
+        )}
+
+        {validation.valid && (
+          <>
+            {/* First-contact warning */}
+            {!confirmed && (
+              <div style={{ padding:"10px 14px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:10, marginBottom:14, fontSize:13 }}>
+                <div style={{ fontWeight:600, color:"#92400e", marginBottom:4 }}>⚠️ First message to this contact?</div>
+                <div style={{ color:"#78350f", marginBottom:8 }}>Meta only allows free-form messages to numbers that have previously messaged you. For cold outreach, you may need a pre-approved template.</div>
+                <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer" }}>
+                  <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} style={{ accentColor:"#f59e0b" }} />
+                  <span style={{ color:"#92400e", fontWeight:500 }}>This contact has previously messaged us / I understand</span>
+                </label>
+              </div>
+            )}
+            {confirmed && (
+              <div style={{ padding:"8px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, marginBottom:14, fontSize:12, color:"#16a34a" }}>
+                ✅ Confirmed — sending as free-form message
+              </div>
+            )}
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 14, color: "#64748b", marginBottom: 8 }}>Quick Templates</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {Object.entries(WA_TEMPLATES).map(([key]) => (
+                  <button key={key} className="btn btn-ghost" style={{ fontSize: 13, padding: "6px 12px" }} onClick={() => setWaMessage(fillTemplate(WA_TEMPLATES[key], contact))}>{key.replace(/_/g," ")}</button>
+                ))}
+              </div>
+            </div>
+            <textarea value={waMessage} onChange={e => setWaMessage(e.target.value)} style={{ width: "100%", minHeight: 120, resize: "vertical", marginBottom: 14, background: "#f8fafc" }} placeholder="Type your message…" />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+              <button className="btn btn-green"
+                style={{ opacity: (waMessage.trim() && confirmed) ? 1 : 0.5 }}
+                onClick={() => { if (waMessage.trim() && confirmed) { onSend(); onClose(); } }}>
+                Send Message ✓
+              </button>
+            </div>
+          </>
+        )}
+
+        {!validation.valid && (
+          <div style={{ display:"flex", justifyContent:"flex-end" }}>
+            <button className="btn btn-ghost" onClick={onClose}>Close</button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -551,12 +626,19 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
         } : c));
         notify(`✅ WhatsApp sent to ${contact.name} via ${contact.assignedTo}'s number`);
       } else {
+        const errCode = data.error?.code;
         const errMsg = data.error?.message || "Unknown error";
+        let friendlyErr = errMsg;
+        if (errCode === 131026) friendlyErr = `❌ ${contact.name}'s number is not on WhatsApp`;
+        else if (errCode === 131047) friendlyErr = `❌ Message outside 24hr window — use a template`;
+        else if (errCode === 100) friendlyErr = `❌ Invalid phone number format — edit the contact`;
+        else if (errCode === 190) friendlyErr = `❌ Access token expired — refresh in Settings`;
+        else if (errCode === 10) friendlyErr = `❌ Permission denied — check token has whatsapp_business_messaging`;
         setContacts(prev => prev.map(c => c.id===contact.id ? {
           ...c,
           whatsappHistory: c.whatsappHistory.map(w => w.id===msgId ? {...w, status:"failed"} : w)
         } : c));
-        notify(`❌ WA failed: ${errMsg}`);
+        notify(friendlyErr);
       }
     } catch (err) {
       setContacts(prev => prev.map(c => c.id===contact.id ? {
