@@ -1172,6 +1172,7 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
             }} onCancel={()=>setShowAddContact(false)} />
           </div>
         </div>
+      )}
       {showCSVImport && <CSVImportModal onImport={(newContacts) => { setContacts(prev => [...prev, ...newContacts]); setShowCSVImport(false); notify(`✅ Imported ${newContacts.length} contacts!`); }} onClose={() => setShowCSVImport(false)} />}
     </div>
   );
