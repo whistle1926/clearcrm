@@ -79,7 +79,6 @@ const BASE_STYLES = `
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Load contacts from localStorage, fall back to sample data
   const [contacts, setContacts] = useState(() => {
     try {
       const saved = localStorage.getItem("clearcrm_contacts");
@@ -87,7 +86,6 @@ export default function App() {
     } catch { return SAMPLE_CONTACTS; }
   });
 
-  // Load waConfig from localStorage
   const [waConfig, setWaConfig] = useState(() => {
     try {
       const saved = localStorage.getItem("clearcrm_waconfig");
@@ -103,20 +101,26 @@ export default function App() {
     }
   });
 
-  // Auto-save contacts whenever they change
+  const [claudeApiKey, setClaudeApiKey] = useState(() => {
+    try { return localStorage.getItem("clearcrm_claudekey") || ""; } catch { return ""; }
+  });
+
   useEffect(() => {
     try { localStorage.setItem("clearcrm_contacts", JSON.stringify(contacts)); } catch {}
   }, [contacts]);
 
-  // Auto-save waConfig whenever it changes
   useEffect(() => {
     try { localStorage.setItem("clearcrm_waconfig", JSON.stringify(waConfig)); } catch {}
   }, [waConfig]);
 
+  useEffect(() => {
+    try { localStorage.setItem("clearcrm_claudekey", claudeApiKey); } catch {}
+  }, [claudeApiKey]);
+
   if (!currentUser) return <LoginScreen onLogin={setCurrentUser} />;
   return currentUser.role === "admin"
-    ? <AdminApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} />
-    : <AgentApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} />;
+    ? <AdminApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} claudeApiKey={claudeApiKey} setClaudeApiKey={setClaudeApiKey} />
+    : <AgentApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} claudeApiKey={claudeApiKey} />;
 }
 
 // ─── LOGIN ─────────────────────────────────────────────────────────────────────
@@ -188,7 +192,7 @@ function useNotify() {
 }
 
 // ─── SHARED CONTACT DETAIL ─────────────────────────────────────────────────────
-function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdmin, waMessage, setWaMessage, showWAModal, setShowWAModal }) {
+function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdmin, waMessage, setWaMessage, showWAModal, setShowWAModal, claudeApiKey }) {
   const [activeTab, setActiveTab] = useState("overview");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState("");
@@ -213,6 +217,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
 
   const getAI = async (type) => {
     setAiLoading(true); setAiSuggestion("");
+    if (!claudeApiKey) { setAiSuggestion("⚠️ No Claude API key set. Go to Settings → AI Configuration to add your key."); setAiLoading(false); return; }
     try {
       const prompts = {
         score: `Lead scoring for investment firm. Score 0-100 with 2-3 sentence explanation. Name:${c.name}, Company:${c.company}, Budget:${c.budget}, Timeline:${c.timeline}, DM:${c.isDecisionMaker}, Interest:${c.interestLevel}/5, Notes:${c.notes}. Plain text only.`,
@@ -220,7 +225,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
         summary: `Summarize client notes in 2 sentences: "${c.notes}"`,
         whatsapp: `Draft WhatsApp under 100 words for ${c.name.split(" ")[0]} at ${c.company}, budget ${c.budget}. Context: ${c.notes}. Goal: nurture and suggest call. Plain text only.`,
       };
-      const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompts[type] }] }) });
+      const res = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": claudeApiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompts[type] }] }) });
       const data = await res.json();
       const text = data.content?.map(b => b.text || "").join("");
       setAiSuggestion(text);
@@ -610,7 +615,7 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
 }
 
 // ─── ADMIN APP ─────────────────────────────────────────────────────────────────
-function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig }) {
+function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig, claudeApiKey, setClaudeApiKey }) {
   const [view, setView] = useState("dashboard");
   const [checklist, setChecklist] = useState({ fb:false, dev:false, verify:false, numbers:false, token:false, test:false, webhook:false });
   const [selectedContact, setSelectedContact] = useState(null);
@@ -729,7 +734,8 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
         <style>{BASE_STYLES}</style>
         <ContactDetail c={c} contacts={contacts} updateContact={updateContact} sendWhatsApp={sendWhatsApp}
           onBack={() => setSelectedContact(null)} isAdmin={true}
-          waMessage={waMessage} setWaMessage={setWaMessage} showWAModal={showWAModal} setShowWAModal={setShowWAModal} />
+          waMessage={waMessage} setWaMessage={setWaMessage} showWAModal={showWAModal} setShowWAModal={setShowWAModal}
+          claudeApiKey={claudeApiKey} />
         {showWAModal && <WAModal contact={showWAModal} waMessage={waMessage} setWaMessage={setWaMessage} onSend={() => sendWhatsApp(showWAModal, waMessage)} onClose={() => setShowWAModal(null)} />}
       </div>
     );
@@ -939,15 +945,36 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
         )}
 
         {/* TEAM & ANALYTICS */}
-        {view==="team" && <TeamAnalytics contacts={contacts} setContacts={setContacts} notify={notify} />}
+        {view==="team" && <TeamAnalytics contacts={contacts} setContacts={setContacts} notify={notify} claudeApiKey={claudeApiKey} />}
 
         {/* SETTINGS */}
         {view==="settings" && (
           <div style={{ padding:28 }} className="fade-in">
             <h1 style={{ fontSize:22, fontWeight:700, marginBottom:6 }}>Settings</h1>
-            <p style={{ color:"#64748b", fontSize:14, marginBottom:24 }}>Configure WhatsApp API credentials per agent. Each agent uses their own number when messaging leads.</p>
+            <p style={{ color:"#64748b", fontSize:14, marginBottom:24 }}>Configure API credentials and system settings.</p>
 
-            {/* Shared Access Token */}
+            {/* Claude AI API Key */}
+            <div className="card" style={{ padding:24, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
+                <div style={{ width:36, height:36, background:"#6366f122", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>✨</div>
+                <div>
+                  <div style={{ fontSize:15, fontWeight:700 }}>AI Configuration — Claude API Key</div>
+                  <div style={{ fontSize:13, color:"#64748b" }}>Powers AI scoring, coaching, projections and WhatsApp drafts</div>
+                </div>
+                {claudeApiKey && <span className="pill" style={{ marginLeft:"auto", background:"#dcfce7", color:"#16a34a", fontSize:12 }}>✅ Key saved</span>}
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:12, alignItems:"end" }}>
+                <div>
+                  <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:6 }}>Anthropic API Key</label>
+                  <input type="password" value={claudeApiKey} onChange={e=>setClaudeApiKey(e.target.value)}
+                    placeholder="sk-ant-api03-…" style={{ width:"100%", fontFamily:"DM Mono,monospace", fontSize:13 }} />
+                </div>
+                <button className="btn btn-primary" onClick={()=>notify("✅ Claude API key saved!")}>Save Key</button>
+              </div>
+              <div style={{ marginTop:12, padding:"10px 14px", background:"#ede9fe", border:"1px solid #c4b5fd", borderRadius:8, fontSize:13, color:"#5b21b6" }}>
+                💡 Get your API key from <strong>console.anthropic.com</strong> → API Keys → Create Key. Your key is stored locally in your browser only.
+              </div>
+            </div>
             <div className="card" style={{ padding:24, marginBottom:20 }}>
               <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
                 <div style={{ width:36, height:36, background:"#25d36622", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>💬</div>
@@ -1369,7 +1396,7 @@ function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
 }
 
 // ─── TEAM ANALYTICS ───────────────────────────────────────────────────────────
-function TeamAnalytics({ contacts, setContacts, notify }) {
+function TeamAnalytics({ contacts, setContacts, notify, claudeApiKey }) {
   const [dateRange, setDateRange] = useState("all");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -1475,7 +1502,8 @@ Provide:
 Numbers, plain text only.`,
     };
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1400,messages:[{role:"user",content:prompts[mode]}]})});
+      if (!claudeApiKey) { setAiResult("⚠️ No Claude API key set. Go to Settings → AI Configuration to add your key."); setAiLoading(false); return; }
+      const res = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":claudeApiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1400,messages:[{role:"user",content:prompts[mode]}]})});
       const data = await res.json();
       setAiResult(data.content?.map(b=>b.text||"").join("")||"No response.");
     } catch { setAiResult("Could not connect. Check your internet."); }
