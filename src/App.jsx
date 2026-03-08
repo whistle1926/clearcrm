@@ -1401,13 +1401,102 @@ function TeamAnalytics({ contacts, setContacts, notify, claudeApiKey }) {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [agentFilter, setAgentFilter] = useState("All");
-  const [lbMetric, setLbMetric] = useState("pipeline"); // leaderboard sort metric
+  const [lbMetric, setLbMetric] = useState("pipeline");
   const [projectionMonths, setProjectionMonths] = useState("3");
   const [aiAgent, setAiAgent] = useState(TEAM_MEMBERS[0]);
   const [aiMode, setAiMode] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState("");
   const [activeTab, setActiveTab] = useState("performance");
+
+  // ── Focus coaching state ─────────────────────────────────────────────────────
+  const [focusPlans, setFocusPlans] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("clearcrm_focusplans") || "{}"); } catch { return {}; }
+  });
+  const [focusLoading, setFocusLoading] = useState({});
+  const [focusAgent, setFocusAgent] = useState(TEAM_MEMBERS[0]);
+
+  useEffect(() => {
+    try { localStorage.setItem("clearcrm_focusplans", JSON.stringify(focusPlans)); } catch {}
+  }, [focusPlans]);
+
+  const generateFocusPlan = async (agentName) => {
+    if (!claudeApiKey) { notify("⚠️ Add your Claude API key in Settings first"); return; }
+    setFocusLoading(p => ({...p, [agentName]: true}));
+    const agentLeads = contacts.filter(c => c.assignedTo === agentName);
+    const stats = {
+      total: agentLeads.length,
+      hot: agentLeads.filter(c => c.category === "A").length,
+      booked: agentLeads.filter(c => c.callStatus === "booked").length,
+      noShow: agentLeads.filter(c => c.callStatus === "no-show").length,
+      completed: agentLeads.filter(c => c.leadStatus === "Completed").length,
+      avgScore: agentLeads.length ? Math.round(agentLeads.reduce((s,c)=>s+c.score,0)/agentLeads.length) : 0,
+      waSent: agentLeads.reduce((s,c)=>s+(c.whatsappHistory?.filter(m=>m.dir==="out").length||0),0),
+      pipeline: agentLeads.reduce((s,c)=>{
+        const v = {"Under 10k":5000,"10k-50k":30000,"50k-100k":75000,"100k-500k":300000,"500k+":750000}[c.budget]||0;
+        return s+v;
+      },0),
+      statuses: [...new Set(agentLeads.map(c=>c.leadStatus))].join(", "),
+      recentNotes: agentLeads.slice(0,5).map(c=>`${c.name}(${c.leadStatus},score:${c.score}): ${c.notes?.slice(0,80)||"no notes"}`).join(" | ")
+    };
+    const teamAvgConv = Math.round((contacts.filter(c=>c.leadStatus==="Completed").length / Math.max(contacts.length,1))*100);
+    const agentConv = stats.total ? Math.round((stats.completed/stats.total)*100) : 0;
+    const prompt = `You are an expert investment sales coach. Analyse ${agentName}'s CRM data and create a focused 2-week action plan.
+
+AGENT DATA:
+- Total leads: ${stats.total} | Hot leads (Cat A): ${stats.hot}
+- Conversion rate: ${agentConv}% (team avg: ${teamAvgConv}%)
+- Calls booked: ${stats.booked} | No-shows: ${stats.noShow} | Completed: ${stats.completed}
+- Avg lead score: ${stats.avgScore}/100 | WA messages sent: ${stats.waSent}
+- Pipeline value: $${(stats.pipeline/1000).toFixed(0)}K
+- Lead statuses: ${stats.statuses}
+- Recent lead notes: ${stats.recentNotes}
+
+Return ONLY valid JSON (no markdown, no extra text) in this exact format:
+{
+  "headline": "One punchy sentence summarising their biggest opportunity",
+  "diagnosis": "2-3 sentences: what the data reveals about their current performance pattern",
+  "focusAction": "The ONE most impactful action to take for the next 2 weeks (be very specific)",
+  "focusWhy": "Explain in 2 sentences exactly why this action will move the needle most",
+  "weeklyTargets": [
+    {"week": 1, "target": "Specific measurable goal for week 1", "metric": "e.g. 5 calls booked"},
+    {"week": 2, "target": "Specific measurable goal for week 2", "metric": "e.g. 3 deals closed"}
+  ],
+  "dailyHabits": ["Habit 1 (specific, takes <15min)", "Habit 2", "Habit 3"],
+  "watchOut": "One warning — the biggest thing that could derail them",
+  "successLooks": "What success looks like in 2 weeks — concrete and measurable"
+}`;
+
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type":"application/json", "x-api-key":claudeApiKey, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
+        body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:1200, messages:[{ role:"user", content:prompt }] })
+      });
+      const data = await res.json();
+      const text = data.content?.map(b=>b.text||"").join("") || "";
+      const clean = text.replace(/```json|```/g,"").trim();
+      const plan = JSON.parse(clean);
+      setFocusPlans(p => ({...p, [agentName]: { ...plan, generatedAt: new Date().toISOString(), agentName, progress: p[agentName]?.progress || {w1:false, w2:false, habits:[]}, checkIns: p[agentName]?.checkIns || [] }}));
+      notify(`✅ Focus plan generated for ${agentName}`);
+    } catch(e) {
+      notify(`❌ Failed to generate plan — check API key`);
+    }
+    setFocusLoading(p => ({...p, [agentName]: false}));
+  };
+
+  const addCheckIn = (agentName, note) => {
+    if (!note.trim()) return;
+    setFocusPlans(p => ({...p, [agentName]: { ...p[agentName], checkIns: [...(p[agentName]?.checkIns||[]), { note, date: new Date().toLocaleDateString("en-GB"), ts: Date.now() }] }}));
+  };
+
+  const toggleProgress = (agentName, key) => {
+    setFocusPlans(p => {
+      const plan = p[agentName] || {};
+      const progress = plan.progress || {};
+      return {...p, [agentName]: {...plan, progress: {...progress, [key]: !progress[key]}}};
+    });
+  };
 
   const agentColors = { Alex:"#6366f1", Jamie:"#10b981", Sam:"#f59e0b", Jordan:"#3b82f6" };
   const fmt = (n) => n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : n >= 1000 ? `$${(n/1000).toFixed(0)}K` : `$${n}`;
@@ -1598,7 +1687,7 @@ Numbers, plain text only.`,
 
       {/* ── TABS ── */}
       <div style={{ display:"flex", gap:4, marginBottom:24, background:"#f1f5f9", padding:4, borderRadius:10, width:"fit-content" }}>
-        {[["performance","📊 Performance"],["agents","👤 Agent Cards"],["reassign","🔄 Reassign"]].map(([t,l])=>(
+        {[["performance","📊 Performance"],["focus","🎯 Focus Plans"],["agents","👤 Agent Cards"],["reassign","🔄 Reassign"]].map(([t,l])=>(
           <button key={t} className={`tab ${activeTab===t?"active":""}`} onClick={()=>setActiveTab(t)}>{l}</button>
         ))}
       </div>
@@ -1803,6 +1892,139 @@ Numbers, plain text only.`,
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ══════════ FOCUS PLANS TAB ══════════ */}
+      {activeTab==="focus"&&(
+        <div>
+          {/* Agent selector */}
+          <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
+            {TEAM_MEMBERS.map(name=>{
+              const hasPlan = !!focusPlans[name];
+              const color = {Alex:"#6366f1",Jamie:"#10b981",Sam:"#f59e0b",Jordan:"#3b82f6"}[name]||"#6366f1";
+              return (
+                <button key={name} onClick={()=>setFocusAgent(name)}
+                  style={{ padding:"10px 20px", borderRadius:10, border:`2px solid ${focusAgent===name?color:"#e2e8f0"}`, background:focusAgent===name?`${color}22`:"#fff", color:focusAgent===name?color:"#64748b", fontWeight:600, fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
+                  {name}
+                  {hasPlan && <span style={{ fontSize:10, background:color, color:"#fff", padding:"1px 6px", borderRadius:99 }}>plan active</span>}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Generate / Refresh button */}
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+            <div>
+              <div style={{ fontSize:18, fontWeight:700 }}>🎯 2-Week Focus Plan — {focusAgent}</div>
+              {focusPlans[focusAgent]?.generatedAt && <div style={{ fontSize:12, color:"#94a3b8", marginTop:2 }}>Generated {new Date(focusPlans[focusAgent].generatedAt).toLocaleDateString("en-GB")}</div>}
+            </div>
+            <button className="btn btn-primary" style={{ opacity:focusLoading[focusAgent]?0.6:1 }}
+              onClick={()=>generateFocusPlan(focusAgent)} disabled={focusLoading[focusAgent]}>
+              {focusLoading[focusAgent] ? "⏳ Analysing…" : focusPlans[focusAgent] ? "🔄 Regenerate Plan" : "✨ Generate Focus Plan"}
+            </button>
+          </div>
+
+          {!focusPlans[focusAgent] && !focusLoading[focusAgent] && (
+            <div style={{ padding:"48px 24px", textAlign:"center", background:"#f8fafc", borderRadius:16, border:"2px dashed #e2e8f0" }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>🎯</div>
+              <div style={{ fontSize:16, fontWeight:600, color:"#1e293b", marginBottom:8 }}>No focus plan yet for {focusAgent}</div>
+              <div style={{ fontSize:14, color:"#64748b", marginBottom:20 }}>Claude will analyse {focusAgent}'s leads, conversion patterns, and activity to generate one clear 2-week action plan.</div>
+              <button className="btn btn-primary" onClick={()=>generateFocusPlan(focusAgent)}>✨ Generate Focus Plan</button>
+            </div>
+          )}
+
+          {focusLoading[focusAgent] && (
+            <div style={{ padding:"48px 24px", textAlign:"center", background:"#f8fafc", borderRadius:16 }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>🤖</div>
+              <div style={{ fontSize:15, fontWeight:600, color:"#6366f1" }}>Analysing {focusAgent}'s performance data…</div>
+              <div style={{ fontSize:13, color:"#94a3b8", marginTop:8 }}>Reviewing leads, conversion patterns, activity and pipeline</div>
+            </div>
+          )}
+
+          {focusPlans[focusAgent] && !focusLoading[focusAgent] && (() => {
+            const plan = focusPlans[focusAgent];
+            const prog = plan.progress || {};
+            const color = {Alex:"#6366f1",Jamie:"#10b981",Sam:"#f59e0b",Jordan:"#3b82f6"}[focusAgent]||"#6366f1";
+            const [checkInNote, setCheckInNote] = useState("");
+            return (
+              <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+                {/* Headline card */}
+                <div style={{ padding:24, background:`linear-gradient(135deg,${color}15,${color}08)`, border:`2px solid ${color}33`, borderRadius:16 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color, letterSpacing:1, marginBottom:8 }}>AI DIAGNOSIS</div>
+                  <div style={{ fontSize:17, fontWeight:700, color:"#1e293b", marginBottom:10 }}>{plan.headline}</div>
+                  <div style={{ fontSize:14, color:"#475569", lineHeight:1.7 }}>{plan.diagnosis}</div>
+                </div>
+
+                {/* THE ONE FOCUS ACTION */}
+                <div style={{ padding:24, background:"#fff", border:"2px solid #6366f1", borderRadius:16 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#6366f1", letterSpacing:1, marginBottom:10 }}>🎯 THE ONE FOCUS ACTION</div>
+                  <div style={{ fontSize:20, fontWeight:800, color:"#1e293b", marginBottom:10 }}>{plan.focusAction}</div>
+                  <div style={{ fontSize:14, color:"#64748b", lineHeight:1.7, marginBottom:16 }}>{plan.focusWhy}</div>
+                  <div style={{ padding:"10px 14px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, fontSize:13, color:"#475569" }}>
+                    ✅ <strong>Success looks like:</strong> {plan.successLooks}
+                  </div>
+                </div>
+
+                {/* Weekly targets */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                  {(plan.weeklyTargets||[]).map(w=>(
+                    <div key={w.week} style={{ padding:20, background:prog[`w${w.week}`]?"#f0fdf4":"#fff", border:`2px solid ${prog[`w${w.week}`]?"#86efac":"#e2e8f0"}`, borderRadius:14, cursor:"pointer", transition:"all 0.2s" }}
+                      onClick={()=>toggleProgress(focusAgent,`w${w.week}`)}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", letterSpacing:1 }}>WEEK {w.week}</div>
+                        <span style={{ fontSize:18 }}>{prog[`w${w.week}`]?"✅":"⬜"}</span>
+                      </div>
+                      <div style={{ fontSize:14, fontWeight:600, color:"#1e293b", marginBottom:6 }}>{w.target}</div>
+                      <div style={{ fontSize:12, color:"#6366f1", fontWeight:600 }}>📊 {w.metric}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Daily habits */}
+                <div style={{ padding:20, background:"#fff", border:"1px solid #e2e8f0", borderRadius:14 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#64748b", marginBottom:14, letterSpacing:1 }}>⚡ DAILY HABITS (tick when done today)</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                    {(plan.dailyHabits||[]).map((h,i)=>(
+                      <div key={i} onClick={()=>toggleProgress(focusAgent,`h${i}`)}
+                        style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:prog[`h${i}`]?"#f0fdf4":"#f8fafc", border:`1px solid ${prog[`h${i}`]?"#bbf7d0":"#e2e8f0"}`, borderRadius:10, cursor:"pointer", transition:"all 0.15s" }}>
+                        <span style={{ fontSize:18, flexShrink:0 }}>{prog[`h${i}`]?"✅":"⬜"}</span>
+                        <span style={{ fontSize:14, color:prog[`h${i}`]?"#16a34a":"#1e293b", fontWeight:prog[`h${i}`]?600:400 }}>{h}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Watch out */}
+                <div style={{ padding:16, background:"#fffbeb", border:"1px solid #fde68a", borderRadius:12, display:"flex", gap:12, alignItems:"flex-start" }}>
+                  <span style={{ fontSize:20 }}>⚠️</span>
+                  <div><div style={{ fontSize:13, fontWeight:700, color:"#92400e", marginBottom:4 }}>WATCH OUT</div><div style={{ fontSize:14, color:"#78350f" }}>{plan.watchOut}</div></div>
+                </div>
+
+                {/* Check-ins log */}
+                <div style={{ padding:20, background:"#fff", border:"1px solid #e2e8f0", borderRadius:14 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#64748b", marginBottom:14, letterSpacing:1 }}>💬 PROGRESS CHECK-INS</div>
+                  {(plan.checkIns||[]).length === 0 && <div style={{ fontSize:13, color:"#94a3b8", marginBottom:12 }}>No check-ins yet. Add your first update below.</div>}
+                  <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+                    {(plan.checkIns||[]).map((ci,i)=>(
+                      <div key={i} style={{ padding:"10px 14px", background:"#f8fafc", borderRadius:10, border:"1px solid #e2e8f0" }}>
+                        <div style={{ fontSize:12, color:"#94a3b8", marginBottom:4 }}>{ci.date}</div>
+                        <div style={{ fontSize:14, color:"#1e293b" }}>{ci.note}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display:"flex", gap:10 }}>
+                    <input value={checkInNote} onChange={e=>setCheckInNote(e.target.value)}
+                      placeholder="Add a progress note, win, or challenge…" style={{ flex:1 }}
+                      onKeyDown={e=>{ if(e.key==="Enter"&&checkInNote.trim()){ addCheckIn(focusAgent,checkInNote); setCheckInNote(""); }}} />
+                    <button className="btn btn-primary" style={{ whiteSpace:"nowrap" }} onClick={()=>{ if(checkInNote.trim()){ addCheckIn(focusAgent,checkInNote); setCheckInNote(""); }}}>Add Note</button>
+                  </div>
+                </div>
+
+              </div>
+            );
+          })()}
         </div>
       )}
 
