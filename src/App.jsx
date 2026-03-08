@@ -1415,6 +1415,7 @@ function TeamAnalytics({ contacts, setContacts, notify, claudeApiKey }) {
   });
   const [focusLoading, setFocusLoading] = useState({});
   const [focusAgent, setFocusAgent] = useState(TEAM_MEMBERS[0]);
+  const [checkInNote, setCheckInNote] = useState("");
 
   useEffect(() => {
     try { localStorage.setItem("clearcrm_focusplans", JSON.stringify(focusPlans)); } catch {}
@@ -1904,7 +1905,7 @@ Numbers, plain text only.`,
               const hasPlan = !!focusPlans[name];
               const color = {Alex:"#6366f1",Jamie:"#10b981",Sam:"#f59e0b",Jordan:"#3b82f6"}[name]||"#6366f1";
               return (
-                <button key={name} onClick={()=>setFocusAgent(name)}
+                <button key={name} onClick={()=>{ setFocusAgent(name); setCheckInNote(""); }}
                   style={{ padding:"10px 20px", borderRadius:10, border:`2px solid ${focusAgent===name?color:"#e2e8f0"}`, background:focusAgent===name?`${color}22`:"#fff", color:focusAgent===name?color:"#64748b", fontWeight:600, fontSize:14, cursor:"pointer", display:"flex", alignItems:"center", gap:8 }}>
                   {name}
                   {hasPlan && <span style={{ fontSize:10, background:color, color:"#fff", padding:"1px 6px", borderRadius:99 }}>plan active</span>}
@@ -1942,11 +1943,10 @@ Numbers, plain text only.`,
             </div>
           )}
 
-          {focusPlans[focusAgent] && !focusLoading[focusAgent] && (() => {
+          {focusPlans[focusAgent] && !focusLoading[focusAgent] && (()=>{
             const plan = focusPlans[focusAgent];
             const prog = plan.progress || {};
             const color = {Alex:"#6366f1",Jamie:"#10b981",Sam:"#f59e0b",Jordan:"#3b82f6"}[focusAgent]||"#6366f1";
-            const [checkInNote, setCheckInNote] = useState("");
             return (
               <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
