@@ -933,7 +933,7 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
             waTemplates={waTemplates}
             setWaTemplates={setWaTemplates}
             onGoToContact={goToContact}
-            onSendQuick={(contact, message) => { setShowWAModal(contact); setWaMessage(message); }}
+            onSendQuick={(contact, message) => { sendWhatsApp(contact, message); }}
             notify={notify}
           />
         )}
@@ -2482,6 +2482,13 @@ function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, 
                 {finalMessage || <span style={{ color:"#94a3b8", fontStyle:"italic" }}>{selectedC ? (sendMode==="slots" ? "Add slots above to see preview…" : "Pick a date and time to see preview…") : "Select a contact to preview…"}</span>}
               </div>
             </div>
+
+            {/* 24hr note for slot mode */}
+            {sendMode==="slots" && selectedC && (
+              <div style={{ marginBottom:16, padding:"10px 14px", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, fontSize:13, color:"#92400e" }}>
+                ⚠️ <strong>First contact?</strong> This is a free-form message — only works if {selectedC.name.split(" ")[0]} has messaged you in the last 24hrs. For cold outreach, use the <strong>Template tab</strong> on the contact's WA button instead.
+              </div>
+            )}
 
             {/* Actions */}
             <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
