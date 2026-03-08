@@ -629,6 +629,22 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
   const [waMessage, setWaMessage] = useState("");
   const [sortField, setSortField] = useState("score");
   const [sortDir, setSortDir] = useState("desc");
+  const [waTemplates, setWaTemplates] = useState(() => {
+    try {
+      const saved = localStorage.getItem("clearcrm_watemplates");
+      return saved ? JSON.parse(saved) : Object.entries(WA_TEMPLATES).map(([key, body]) => ({
+        id: key, name: key.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase()), body, isDefault: true
+      }));
+    } catch {
+      return Object.entries(WA_TEMPLATES).map(([key, body]) => ({
+        id: key, name: key.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase()), body, isDefault: true
+      }));
+    }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem("clearcrm_watemplates", JSON.stringify(waTemplates)); } catch {}
+  }, [waTemplates]);
   const { notify, NotificationEl } = useNotify();
 
   const updateContact = (id, updates) => setContacts(prev => prev.map(c => c.id===id ? {...c,...updates} : c));
@@ -912,36 +928,14 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
 
         {/* WHATSAPP */}
         {view==="whatsapp" && (
-          <div style={{ padding:28 }} className="fade-in">
-            <h1 style={{ fontSize:22, fontWeight:700, marginBottom:20 }}>WhatsApp Activity</h1>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
-              <div className="card" style={{ padding:20 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:"#64748b", marginBottom:14 }}>ALL CONVERSATIONS</div>
-                {contacts.filter(c=>c.whatsappHistory.length>0).map(c => {
-                  const last = c.whatsappHistory[c.whatsappHistory.length-1];
-                  return (
-                    <div key={c.id} style={{ display:"flex", gap:12, padding:"12px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
-                      <div style={{ width:44, height:44, background:"#25d366", borderRadius:50, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>💬</div>
-                      <div style={{ flex:1, overflow:"hidden" }}>
-                        <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontSize:15, fontWeight:600 }}>{c.name}</span><span style={{ fontSize:12, color:"#64748b" }}>{last.time.split(" ")[0]}</span></div>
-                        <div style={{ fontSize:13, color:"#64748b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{last.msg}</div>
-                        <span style={{ fontSize:11, color:"#64748b" }}>→ {c.assignedTo}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="card" style={{ padding:20 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:"#64748b", marginBottom:14 }}>MESSAGE TEMPLATES</div>
-                {Object.entries(WA_TEMPLATES).map(([key,tpl]) => (
-                  <div key={key} style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:14, marginBottom:12 }}>
-                    <div style={{ fontSize:14, fontWeight:600, color:"#6366f1", marginBottom:6 }}>{key.replace(/_/g," ").replace(/\b\w/g,l=>l.toUpperCase())}</div>
-                    <div style={{ fontSize:14, color:"#64748b", lineHeight:1.6, whiteSpace:"pre-wrap" }}>{tpl}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <WAActivityView
+            contacts={contacts}
+            waTemplates={waTemplates}
+            setWaTemplates={setWaTemplates}
+            onGoToContact={goToContact}
+            onSendQuick={(contact, message) => { setShowWAModal(contact); setWaMessage(message); }}
+            notify={notify}
+          />
         )}
 
         {/* TEAM & ANALYTICS */}
@@ -2120,6 +2114,233 @@ Numbers, plain text only.`,
   );
 }
 
+
+// ─── WA ACTIVITY VIEW ──────────────────────────────────────────────────────────
+function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, onSendQuick, notify }) {
+  const [activeTab, setActiveTab] = useState("conversations");
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ name:"", body:"" });
+  const [showAddTemplate, setShowAddTemplate] = useState(false);
+  const [newTemplate, setNewTemplate] = useState({ name:"", body:"" });
+  const [sendModal, setSendModal] = useState(null); // { template, contact }
+  const [selectedContact, setSelectedContact] = useState("");
+  const [callDate, setCallDate] = useState("");
+  const [callTime, setCallTime] = useState("");
+  const [callTimezone, setCallTimezone] = useState("GMT");
+  const [meetingLink, setMeetingLink] = useState("");
+
+  const conversations = contacts.filter(c=>c.whatsappHistory?.length>0)
+    .sort((a,b)=>{ const la=a.whatsappHistory[a.whatsappHistory.length-1]?.time||""; const lb=b.whatsappHistory[b.whatsappHistory.length-1]?.time||""; return lb.localeCompare(la); });
+
+  const fillTpl = (body, c, date, time, tz, link) => {
+    const first = c?.name?.split(" ")[0] || "{{name}}";
+    return body
+      .replace(/{{name}}/g, first)
+      .replace(/{{date}}/g, date || c?.callDate || "TBD")
+      .replace(/{{time}}/g, time || c?.callTime || "TBD")
+      .replace(/{{timezone}}/g, tz || c?.timezone || "")
+      .replace(/{{link}}/g, link || c?.meetingLink || "#");
+  };
+
+  const TIMEZONES = ["GMT","UTC","EST (UTC-5)","EDT (UTC-4)","CST (UTC-6)","MST (UTC-7)","PST (UTC-8)","IST (UTC+5:30)","CET (UTC+1)","EET (UTC+2)","AST (UTC+3)","GST (UTC+4)","ICT (UTC+7)","SGT (UTC+8)","AEST (UTC+10)"];
+  const QUICK_TIMES = ["8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM"];
+
+  const selectedC = contacts.find(c=>c.id===parseInt(selectedContact));
+  const preview = sendModal ? fillTpl(sendModal.body, selectedC||{name:"{{name}}"}, callDate, callTime, callTimezone, meetingLink) : "";
+
+  return (
+    <div style={{ padding:28 }} className="fade-in">
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+        <h1 style={{ fontSize:22, fontWeight:700 }}>WhatsApp</h1>
+        <button className="btn btn-primary" onClick={()=>setShowAddTemplate(true)}>+ New Template</button>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display:"flex", gap:4, marginBottom:20, background:"#f8fafc", padding:4, borderRadius:10, width:"fit-content" }}>
+        {[["conversations","💬 Conversations"],["templates","📋 Templates"]].map(([t,l])=>(
+          <button key={t} className={`tab ${activeTab===t?"active":""}`} onClick={()=>setActiveTab(t)}>{l}</button>
+        ))}
+      </div>
+
+      {/* CONVERSATIONS */}
+      {activeTab==="conversations" && (
+        <div className="card" style={{ padding:20 }}>
+          {conversations.length===0 && <div style={{ textAlign:"center", padding:40, color:"#94a3b8" }}>No WhatsApp conversations yet</div>}
+          {conversations.map(c=>{
+            const last = c.whatsappHistory[c.whatsappHistory.length-1];
+            const unread = c.whatsappHistory.filter(m=>m.dir==="in").length;
+            return (
+              <div key={c.id} style={{ display:"flex", gap:14, padding:"14px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer", alignItems:"center" }}
+                onClick={()=>onGoToContact(c)}>
+                <div style={{ width:48, height:48, background:"linear-gradient(135deg,#25d366,#128c7e)", borderRadius:50, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>💬</div>
+                <div style={{ flex:1, overflow:"hidden" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                    <span style={{ fontSize:15, fontWeight:600 }}>{c.name}</span>
+                    <span style={{ fontSize:12, color:"#94a3b8" }}>{last.time?.split(" ")[0]}</span>
+                  </div>
+                  <div style={{ fontSize:13, color:"#64748b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginBottom:3 }}>
+                    {last.msg?.startsWith("__TEMPLATE__") ? "📋 Template message sent" : last.msg}
+                  </div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    <span style={{ fontSize:11, color:"#94a3b8" }}>→ {c.assignedTo}</span>
+                    <span className="pill" style={{ fontSize:10, background:last.status==="delivered"?"#dcfce7":last.status==="failed"?"#fee2e2":"#f1f5f9", color:last.status==="delivered"?"#16a34a":last.status==="failed"?"#dc2626":"#94a3b8", padding:"1px 6px" }}>{last.status||"sent"}</span>
+                  </div>
+                </div>
+                <button className="btn btn-ghost" style={{ fontSize:12, whiteSpace:"nowrap", flexShrink:0 }}
+                  onClick={e=>{ e.stopPropagation(); onGoToContact(c); }}>Open Chat →</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* TEMPLATES */}
+      {activeTab==="templates" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div style={{ padding:"10px 16px", background:"#ede9fe", border:"1px solid #c4b5fd", borderRadius:10, fontSize:13, color:"#5b21b6" }}>
+            💡 Use <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{name}}"}</code>, <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{date}}"}</code>, <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{time}}"}</code>, <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{timezone}}"}</code>, <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{link}}"}</code> in your templates. They auto-fill when you send.
+          </div>
+
+          {waTemplates.map(tpl=>(
+            <div key={tpl.id} className="card" style={{ padding:20 }}>
+              {editingId===tpl.id ? (
+                <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                  <input value={editForm.name} onChange={e=>setEditForm(f=>({...f,name:e.target.value}))} style={{ fontWeight:700, fontSize:15 }} placeholder="Template name" />
+                  <textarea value={editForm.body} onChange={e=>setEditForm(f=>({...f,body:e.target.value}))} style={{ minHeight:120, resize:"vertical", fontSize:14, lineHeight:1.7 }} />
+                  <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                    <button className="btn btn-ghost" onClick={()=>setEditingId(null)}>Cancel</button>
+                    <button className="btn btn-primary" onClick={()=>{ setWaTemplates(p=>p.map(t=>t.id===tpl.id?{...t,...editForm}:t)); setEditingId(null); notify("✅ Template saved"); }}>Save</button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                    <div>
+                      <div style={{ fontSize:15, fontWeight:700, color:"#1e293b", marginBottom:3 }}>{tpl.name}</div>
+                      {tpl.isDefault && <span className="pill" style={{ fontSize:10, background:"#f1f5f9", color:"#94a3b8" }}>default</span>}
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 12px" }}
+                        onClick={()=>{ setEditingId(tpl.id); setEditForm({ name:tpl.name, body:tpl.body }); }}>✏️ Edit</button>
+                      <button className="btn btn-primary" style={{ fontSize:12, padding:"6px 14px", background:"#25d366" }}
+                        onClick={()=>{ setSendModal(tpl); setSelectedContact(""); setCallDate(""); setCallTime(""); setCallTimezone("GMT"); setMeetingLink(""); }}>
+                        💬 Send
+                      </button>
+                      {!tpl.isDefault && <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 10px", color:"#ef4444" }}
+                        onClick={()=>{ if(window.confirm(`Delete "${tpl.name}"?`)) setWaTemplates(p=>p.filter(t=>t.id!==tpl.id)); }}>🗑️</button>}
+                    </div>
+                  </div>
+                  <div style={{ fontSize:14, color:"#64748b", lineHeight:1.8, whiteSpace:"pre-wrap", background:"#f8fafc", borderRadius:8, padding:"12px 14px", border:"1px solid #f1f5f9" }}>{tpl.body}</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ADD TEMPLATE MODAL */}
+      {showAddTemplate && (
+        <div className="overlay" onClick={()=>setShowAddTemplate(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16 }}>
+              <div style={{ fontSize:17, fontWeight:700 }}>New Template</div>
+              <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={()=>setShowAddTemplate(false)}>✕</button>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              <div>
+                <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5 }}>Template Name</label>
+                <input value={newTemplate.name} onChange={e=>setNewTemplate(f=>({...f,name:e.target.value}))} placeholder="e.g. Follow Up After Call" style={{ width:"100%" }} />
+              </div>
+              <div>
+                <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5 }}>Message Body</label>
+                <textarea value={newTemplate.body} onChange={e=>setNewTemplate(f=>({...f,body:e.target.value}))}
+                  style={{ width:"100%", minHeight:140, resize:"vertical" }}
+                  placeholder={"Hi {{name}}! Great speaking with you.\n\nI'd love to schedule a follow-up call at {{date}} {{time}} {{timezone}}.\n\n{{link}}"} />
+                <div style={{ fontSize:12, color:"#94a3b8", marginTop:4 }}>Use {"{{name}} {{date}} {{time}} {{timezone}} {{link}}"}</div>
+              </div>
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+                <button className="btn btn-ghost" onClick={()=>setShowAddTemplate(false)}>Cancel</button>
+                <button className="btn btn-primary" onClick={()=>{
+                  if(!newTemplate.name.trim()||!newTemplate.body.trim()) return;
+                  setWaTemplates(p=>[...p,{id:`custom_${Date.now()}`,name:newTemplate.name,body:newTemplate.body,isDefault:false}]);
+                  setNewTemplate({name:"",body:""});
+                  setShowAddTemplate(false);
+                  notify("✅ Template created");
+                }}>Create Template</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEND TEMPLATE MODAL — with contact picker + time selector */}
+      {sendModal && (
+        <div className="overlay" onClick={()=>setSendModal(null)}>
+          <div className="modal" style={{ maxWidth:540 }} onClick={e=>e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16 }}>
+              <div><div style={{ fontSize:17, fontWeight:700 }}>Send: {sendModal.name}</div><div style={{ fontSize:13, color:"#64748b" }}>Fill in the details below</div></div>
+              <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={()=>setSendModal(null)}>✕</button>
+            </div>
+
+            {/* Contact picker */}
+            <div style={{ marginBottom:14 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>📇 Select Contact *</label>
+              <select value={selectedContact} onChange={e=>setSelectedContact(e.target.value)} style={{ width:"100%" }}>
+                <option value="">— Choose a contact —</option>
+                {contacts.map(c=><option key={c.id} value={c.id}>{c.name} {c.phone ? `· ${c.phone}` : "· no phone"} ({c.assignedTo})</option>)}
+              </select>
+            </div>
+
+            {/* Date + Time picker */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+              <div>
+                <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>📅 Call Date</label>
+                <input type="date" value={callDate} onChange={e=>setCallDate(e.target.value)} style={{ width:"100%" }} min={new Date().toISOString().split("T")[0]} />
+              </div>
+              <div>
+                <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>🕐 Call Time</label>
+                <select value={callTime} onChange={e=>setCallTime(e.target.value)} style={{ width:"100%" }}>
+                  <option value="">— Select time —</option>
+                  {QUICK_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+              <div>
+                <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>🌍 Timezone</label>
+                <select value={callTimezone} onChange={e=>setCallTimezone(e.target.value)} style={{ width:"100%" }}>
+                  {TIMEZONES.map(tz=><option key={tz} value={tz}>{tz}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>🔗 Meeting Link</label>
+                <input value={meetingLink} onChange={e=>setMeetingLink(e.target.value)} placeholder="https://zoom.us/j/..." style={{ width:"100%" }} />
+              </div>
+            </div>
+
+            {/* Live preview */}
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:"#64748b", marginBottom:8 }}>👁️ Message Preview</div>
+              <div style={{ padding:"14px 16px", background:"#dcfce7", borderRadius:12, borderBottomRightRadius:4, fontSize:14, lineHeight:1.8, color:"#166534", whiteSpace:"pre-wrap", border:"1px solid #bbf7d0" }}>
+                {preview || <span style={{ color:"#94a3b8", fontStyle:"italic" }}>Select a contact to preview…</span>}
+              </div>
+            </div>
+
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+              <button className="btn btn-ghost" onClick={()=>setSendModal(null)}>Cancel</button>
+              <button className="btn btn-green" style={{ opacity:selectedC?1:0.4 }} onClick={()=>{
+                if (!selectedC) return;
+                onSendQuick(selectedC, preview);
+                setSendModal(null);
+              }}>💬 Send Message</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── CSV IMPORT MODAL ──────────────────────────────────────────────────────────
 const CSV_TEMPLATE_HEADERS = ["name","phone","email","company","source","budget","timeline","isDecisionMaker","interestLevel","leadStatus","assignedTo","notes"];
