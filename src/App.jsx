@@ -2116,37 +2116,125 @@ Numbers, plain text only.`,
 
 
 // ─── WA ACTIVITY VIEW ──────────────────────────────────────────────────────────
+
+// Timezone offset map (hours from UTC)
+const TZ_OFFSETS = {
+  "GMT":0,"UTC":0,"BST":1,"IST_IE":1,
+  "EST":-5,"EDT":-4,"CST":-6,"CDT":-5,"MST":-7,"PST":-8,"PDT":-7,
+  "IST":5.5,"GST":4,"AST":3,"EET":2,"CET":1,"CEST":2,
+  "WAT":1,"EAT":3,"ICT":7,"SGT":8,"HKT":8,"JST":9,"AEST":10,"AEDT":11,"NZST":12
+};
+const TZ_LIST = Object.keys(TZ_OFFSETS);
+
+function convertTime(timeStr, fromTZ, toTZ) {
+  // timeStr: "10:00 AM" or "10:00"
+  if (!timeStr || !fromTZ || !toTZ) return timeStr;
+  try {
+    const from = TZ_OFFSETS[fromTZ.split(" ")[0]] ?? 0;
+    const to   = TZ_OFFSETS[toTZ.split(" ")[0]]   ?? 0;
+    const [t, ampm] = timeStr.split(" ");
+    let [h, m] = t.split(":").map(Number);
+    if (ampm === "PM" && h !== 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    let utcH = h - from;
+    let localH = utcH + to;
+    // wrap
+    while (localH < 0) localH += 24;
+    while (localH >= 24) localH -= 24;
+    const suffix = localH < 12 ? "AM" : "PM";
+    const display = localH % 12 === 0 ? 12 : localH % 12;
+    return `${display}:${String(m).padStart(2,"0")} ${suffix}`;
+  } catch { return timeStr; }
+}
+
+function formatSlotDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T12:00:00");
+  return d.toLocaleDateString("en-GB", { weekday:"short", day:"numeric", month:"short" });
+}
+
 function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, onSendQuick, notify }) {
   const [activeTab, setActiveTab] = useState("conversations");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name:"", body:"" });
   const [showAddTemplate, setShowAddTemplate] = useState(false);
   const [newTemplate, setNewTemplate] = useState({ name:"", body:"" });
-  const [sendModal, setSendModal] = useState(null); // { template, contact }
-  const [selectedContact, setSelectedContact] = useState("");
-  const [callDate, setCallDate] = useState("");
-  const [callTime, setCallTime] = useState("");
-  const [callTimezone, setCallTimezone] = useState("GMT");
+
+  // Send modal state
+  const [sendModal, setSendModal] = useState(null);
+  const [sendStep, setSendStep] = useState("setup"); // "setup" | "preview"
+  const [selectedContactId, setSelectedContactId] = useState("");
+  const [agentTZ, setAgentTZ] = useState("GMT");
   const [meetingLink, setMeetingLink] = useState("");
+  const [slots, setSlots] = useState([]); // [{date, time, id}]
+  const [slotDate, setSlotDate] = useState("");
+  const [slotTime, setSlotTime] = useState("");
+  const [sendMode, setSendMode] = useState("slots"); // "slots" | "fixed"
+  const [fixedDate, setFixedDate] = useState("");
+  const [fixedTime, setFixedTime] = useState("");
+
+  const QUICK_TIMES = ["8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM"];
+  const today = new Date().toISOString().split("T")[0];
+
+  const selectedC = contacts.find(c => c.id === parseInt(selectedContactId));
+  const contactTZ = selectedC?.timezone?.split(" ")[0] || "GMT";
+
+  const addSlot = () => {
+    if (!slotDate || !slotTime) return;
+    if (slots.find(s => s.date === slotDate && s.time === slotTime)) return;
+    setSlots(p => [...p, { id: Date.now(), date: slotDate, time: slotTime }]);
+    setSlotTime("");
+  };
+
+  const removeSlot = (id) => setSlots(p => p.filter(s => s.id !== id));
+
+  const buildSlotsMessage = () => {
+    if (!selectedC) return "";
+    const name = selectedC.name.split(" ")[0];
+    const cTZ = contactTZ;
+    const sorted = [...slots].sort((a,b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+    const slotLines = sorted.map((s,i) => {
+      const converted = convertTime(s.time, agentTZ, cTZ);
+      return `  ${i+1}. ${formatSlotDate(s.date)} at ${converted} ${cTZ !== agentTZ ? `(${s.time} ${agentTZ})` : agentTZ}`;
+    }).join("\n");
+    const link = meetingLink ? `\n\nJoin here: ${meetingLink}` : "";
+    return `Hi ${name}! 👋 I'd love to schedule a call with you.\n\nHere are some times that work for me — please let me know which suits you best:\n\n${slotLines}\n\nJust reply with your preferred option and I'll send over a confirmation!${link}`;
+  };
+
+  const buildFixedMessage = () => {
+    if (!selectedC) return "";
+    const name = selectedC.name.split(" ")[0];
+    const cTZ = contactTZ;
+    const converted = convertTime(fixedTime, agentTZ, cTZ);
+    const timeDisplay = cTZ !== agentTZ ? `${converted} ${cTZ} (${fixedTime} ${agentTZ})` : `${fixedTime} ${agentTZ}`;
+    return sendModal?.body
+      ? sendModal.body
+          .replace(/{{name}}/g, name)
+          .replace(/{{date}}/g, fixedDate ? formatSlotDate(fixedDate) : "TBD")
+          .replace(/{{time}}/g, fixedTime ? timeDisplay : "TBD")
+          .replace(/{{timezone}}/g, cTZ)
+          .replace(/{{link}}/g, meetingLink || selectedC.meetingLink || "#")
+      : "";
+  };
+
+  const finalMessage = sendMode === "slots" ? buildSlotsMessage() : buildFixedMessage();
 
   const conversations = contacts.filter(c=>c.whatsappHistory?.length>0)
     .sort((a,b)=>{ const la=a.whatsappHistory[a.whatsappHistory.length-1]?.time||""; const lb=b.whatsappHistory[b.whatsappHistory.length-1]?.time||""; return lb.localeCompare(la); });
 
-  const fillTpl = (body, c, date, time, tz, link) => {
-    const first = c?.name?.split(" ")[0] || "{{name}}";
-    return body
-      .replace(/{{name}}/g, first)
-      .replace(/{{date}}/g, date || c?.callDate || "TBD")
-      .replace(/{{time}}/g, time || c?.callTime || "TBD")
-      .replace(/{{timezone}}/g, tz || c?.timezone || "")
-      .replace(/{{link}}/g, link || c?.meetingLink || "#");
+  const openSendModal = (tpl) => {
+    setSendModal(tpl);
+    setSendStep("setup");
+    setSelectedContactId("");
+    setAgentTZ("GMT");
+    setMeetingLink("");
+    setSlots([]);
+    setSlotDate("");
+    setSlotTime("");
+    setSendMode(tpl.body?.includes("{{time}}") ? "slots" : "fixed");
+    setFixedDate("");
+    setFixedTime("");
   };
-
-  const TIMEZONES = ["GMT","UTC","EST (UTC-5)","EDT (UTC-4)","CST (UTC-6)","MST (UTC-7)","PST (UTC-8)","IST (UTC+5:30)","CET (UTC+1)","EET (UTC+2)","AST (UTC+3)","GST (UTC+4)","ICT (UTC+7)","SGT (UTC+8)","AEST (UTC+10)"];
-  const QUICK_TIMES = ["8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM"];
-
-  const selectedC = contacts.find(c=>c.id===parseInt(selectedContact));
-  const preview = sendModal ? fillTpl(sendModal.body, selectedC||{name:"{{name}}"}, callDate, callTime, callTimezone, meetingLink) : "";
 
   return (
     <div style={{ padding:28 }} className="fade-in">
@@ -2168,10 +2256,8 @@ function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, 
           {conversations.length===0 && <div style={{ textAlign:"center", padding:40, color:"#94a3b8" }}>No WhatsApp conversations yet</div>}
           {conversations.map(c=>{
             const last = c.whatsappHistory[c.whatsappHistory.length-1];
-            const unread = c.whatsappHistory.filter(m=>m.dir==="in").length;
             return (
-              <div key={c.id} style={{ display:"flex", gap:14, padding:"14px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer", alignItems:"center" }}
-                onClick={()=>onGoToContact(c)}>
+              <div key={c.id} style={{ display:"flex", gap:14, padding:"14px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer", alignItems:"center" }} onClick={()=>onGoToContact(c)}>
                 <div style={{ width:48, height:48, background:"linear-gradient(135deg,#25d366,#128c7e)", borderRadius:50, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>💬</div>
                 <div style={{ flex:1, overflow:"hidden" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3 }}>
@@ -2186,8 +2272,7 @@ function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, 
                     <span className="pill" style={{ fontSize:10, background:last.status==="delivered"?"#dcfce7":last.status==="failed"?"#fee2e2":"#f1f5f9", color:last.status==="delivered"?"#16a34a":last.status==="failed"?"#dc2626":"#94a3b8", padding:"1px 6px" }}>{last.status||"sent"}</span>
                   </div>
                 </div>
-                <button className="btn btn-ghost" style={{ fontSize:12, whiteSpace:"nowrap", flexShrink:0 }}
-                  onClick={e=>{ e.stopPropagation(); onGoToContact(c); }}>Open Chat →</button>
+                <button className="btn btn-ghost" style={{ fontSize:12, whiteSpace:"nowrap", flexShrink:0 }} onClick={e=>{ e.stopPropagation(); onGoToContact(c); }}>Open →</button>
               </div>
             );
           })}
@@ -2198,9 +2283,8 @@ function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, 
       {activeTab==="templates" && (
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
           <div style={{ padding:"10px 16px", background:"#ede9fe", border:"1px solid #c4b5fd", borderRadius:10, fontSize:13, color:"#5b21b6" }}>
-            💡 Use <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{name}}"}</code>, <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{date}}"}</code>, <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{time}}"}</code>, <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{timezone}}"}</code>, <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{link}}"}</code> in your templates. They auto-fill when you send.
+            💡 Use <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{name}}"}</code> <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{date}}"}</code> <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{time}}"}</code> <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{timezone}}"}</code> <code style={{ background:"#ddd6fe", padding:"1px 5px", borderRadius:4 }}>{"{{link}}"}</code> — auto-filled when you send
           </div>
-
           {waTemplates.map(tpl=>(
             <div key={tpl.id} className="card" style={{ padding:20 }}>
               {editingId===tpl.id ? (
@@ -2220,14 +2304,9 @@ function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, 
                       {tpl.isDefault && <span className="pill" style={{ fontSize:10, background:"#f1f5f9", color:"#94a3b8" }}>default</span>}
                     </div>
                     <div style={{ display:"flex", gap:8 }}>
-                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 12px" }}
-                        onClick={()=>{ setEditingId(tpl.id); setEditForm({ name:tpl.name, body:tpl.body }); }}>✏️ Edit</button>
-                      <button className="btn btn-primary" style={{ fontSize:12, padding:"6px 14px", background:"#25d366" }}
-                        onClick={()=>{ setSendModal(tpl); setSelectedContact(""); setCallDate(""); setCallTime(""); setCallTimezone("GMT"); setMeetingLink(""); }}>
-                        💬 Send
-                      </button>
-                      {!tpl.isDefault && <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 10px", color:"#ef4444" }}
-                        onClick={()=>{ if(window.confirm(`Delete "${tpl.name}"?`)) setWaTemplates(p=>p.filter(t=>t.id!==tpl.id)); }}>🗑️</button>}
+                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 12px" }} onClick={()=>{ setEditingId(tpl.id); setEditForm({ name:tpl.name, body:tpl.body }); }}>✏️ Edit</button>
+                      <button style={{ padding:"6px 14px", borderRadius:8, border:"none", background:"#25d366", color:"#fff", fontSize:12, fontWeight:600, cursor:"pointer" }} onClick={()=>openSendModal(tpl)}>💬 Send</button>
+                      {!tpl.isDefault && <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 10px", color:"#ef4444" }} onClick={()=>{ if(window.confirm(`Delete "${tpl.name}"?`)) setWaTemplates(p=>p.filter(t=>t.id!==tpl.id)); }}>🗑️</button>}
                     </div>
                   </div>
                   <div style={{ fontSize:14, color:"#64748b", lineHeight:1.8, whiteSpace:"pre-wrap", background:"#f8fafc", borderRadius:8, padding:"12px 14px", border:"1px solid #f1f5f9" }}>{tpl.body}</div>
@@ -2255,17 +2334,15 @@ function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, 
                 <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5 }}>Message Body</label>
                 <textarea value={newTemplate.body} onChange={e=>setNewTemplate(f=>({...f,body:e.target.value}))}
                   style={{ width:"100%", minHeight:140, resize:"vertical" }}
-                  placeholder={"Hi {{name}}! Great speaking with you.\n\nI'd love to schedule a follow-up call at {{date}} {{time}} {{timezone}}.\n\n{{link}}"} />
-                <div style={{ fontSize:12, color:"#94a3b8", marginTop:4 }}>Use {"{{name}} {{date}} {{time}} {{timezone}} {{link}}"}</div>
+                  placeholder={"Hi {{name}}! Great speaking with you.\n\nI'd love to schedule a follow-up call.\n\n{{link}}"} />
+                <div style={{ fontSize:12, color:"#94a3b8", marginTop:4 }}>{"Use {{name}} {{date}} {{time}} {{timezone}} {{link}}"}</div>
               </div>
               <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
                 <button className="btn btn-ghost" onClick={()=>setShowAddTemplate(false)}>Cancel</button>
                 <button className="btn btn-primary" onClick={()=>{
                   if(!newTemplate.name.trim()||!newTemplate.body.trim()) return;
                   setWaTemplates(p=>[...p,{id:`custom_${Date.now()}`,name:newTemplate.name,body:newTemplate.body,isDefault:false}]);
-                  setNewTemplate({name:"",body:""});
-                  setShowAddTemplate(false);
-                  notify("✅ Template created");
+                  setNewTemplate({name:"",body:""}); setShowAddTemplate(false); notify("✅ Template created");
                 }}>Create Template</button>
               </div>
             </div>
@@ -2273,74 +2350,156 @@ function WAActivityView({ contacts, waTemplates, setWaTemplates, onGoToContact, 
         </div>
       )}
 
-      {/* SEND TEMPLATE MODAL — with contact picker + time selector */}
+      {/* ═══════════ SEND MODAL ═══════════ */}
       {sendModal && (
         <div className="overlay" onClick={()=>setSendModal(null)}>
-          <div className="modal" style={{ maxWidth:540 }} onClick={e=>e.stopPropagation()}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16 }}>
-              <div><div style={{ fontSize:17, fontWeight:700 }}>Send: {sendModal.name}</div><div style={{ fontSize:13, color:"#64748b" }}>Fill in the details below</div></div>
+          <div className="modal" style={{ maxWidth:580, maxHeight:"90vh", overflowY:"auto" }} onClick={e=>e.stopPropagation()}>
+
+            {/* Header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+              <div>
+                <div style={{ fontSize:17, fontWeight:700 }}>💬 {sendModal.name}</div>
+                <div style={{ fontSize:13, color:"#64748b", marginTop:3 }}>Fill in details, then preview and send</div>
+              </div>
               <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={()=>setSendModal(null)}>✕</button>
             </div>
 
             {/* Contact picker */}
-            <div style={{ marginBottom:14 }}>
-              <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>📇 Select Contact *</label>
-              <select value={selectedContact} onChange={e=>setSelectedContact(e.target.value)} style={{ width:"100%" }}>
-                <option value="">— Choose a contact —</option>
-                {contacts.map(c=><option key={c.id} value={c.id}>{c.name} {c.phone ? `· ${c.phone}` : "· no phone"} ({c.assignedTo})</option>)}
-              </select>
-            </div>
-
-            {/* Date + Time picker */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
-              <div>
-                <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>📅 Call Date</label>
-                <input type="date" value={callDate} onChange={e=>setCallDate(e.target.value)} style={{ width:"100%" }} min={new Date().toISOString().split("T")[0]} />
-              </div>
-              <div>
-                <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>🕐 Call Time</label>
-                <select value={callTime} onChange={e=>setCallTime(e.target.value)} style={{ width:"100%" }}>
-                  <option value="">— Select time —</option>
-                  {QUICK_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-              <div>
-                <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>🌍 Timezone</label>
-                <select value={callTimezone} onChange={e=>setCallTimezone(e.target.value)} style={{ width:"100%" }}>
-                  {TIMEZONES.map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize:13, fontWeight:600, color:"#64748b", display:"block", marginBottom:6 }}>🔗 Meeting Link</label>
-                <input value={meetingLink} onChange={e=>setMeetingLink(e.target.value)} placeholder="https://zoom.us/j/..." style={{ width:"100%" }} />
-              </div>
-            </div>
-
-            {/* Live preview */}
             <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:"#64748b", marginBottom:8 }}>👁️ Message Preview</div>
-              <div style={{ padding:"14px 16px", background:"#dcfce7", borderRadius:12, borderBottomRightRadius:4, fontSize:14, lineHeight:1.8, color:"#166534", whiteSpace:"pre-wrap", border:"1px solid #bbf7d0" }}>
-                {preview || <span style={{ color:"#94a3b8", fontStyle:"italic" }}>Select a contact to preview…</span>}
+              <label style={{ fontSize:13, fontWeight:600, color:"#475569", display:"block", marginBottom:6 }}>📇 Contact *</label>
+              <select value={selectedContactId} onChange={e=>setSelectedContactId(e.target.value)} style={{ width:"100%" }}>
+                <option value="">— Choose a contact —</option>
+                {contacts.map(c=><option key={c.id} value={c.id}>{c.name} · {c.phone||"no phone"} · {c.timezone||"?"} timezone ({c.assignedTo})</option>)}
+              </select>
+              {selectedC && (
+                <div style={{ marginTop:8, padding:"8px 12px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, fontSize:13, color:"#166534" }}>
+                  ✅ {selectedC.name} is in <strong>{contactTZ}</strong> timezone
+                </div>
+              )}
+            </div>
+
+            {/* Agent timezone */}
+            <div style={{ marginBottom:16 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:"#475569", display:"block", marginBottom:6 }}>🌍 Your Timezone (agent)</label>
+              <select value={agentTZ} onChange={e=>setAgentTZ(e.target.value)} style={{ width:"100%" }}>
+                {TZ_LIST.map(tz=><option key={tz} value={tz}>{tz} (UTC{TZ_OFFSETS[tz]>=0?"+":""}{ TZ_OFFSETS[tz]})</option>)}
+              </select>
+              {selectedC && agentTZ !== contactTZ && (
+                <div style={{ marginTop:6, fontSize:12, color:"#6366f1", padding:"6px 10px", background:"#ede9fe", borderRadius:6 }}>
+                  ⚡ Times will be automatically converted from <strong>{agentTZ}</strong> → <strong>{contactTZ}</strong> for {selectedC.name.split(" ")[0]}
+                </div>
+              )}
+            </div>
+
+            {/* Mode toggle */}
+            <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+              <button onClick={()=>setSendMode("slots")} style={{ flex:1, padding:"10px", borderRadius:9, border:`2px solid ${sendMode==="slots"?"#6366f1":"#e2e8f0"}`, background:sendMode==="slots"?"#ede9fe":"#f8fafc", color:sendMode==="slots"?"#4338ca":"#64748b", fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                🗓️ Offer Time Slots<br/><span style={{ fontSize:11, fontWeight:400 }}>Let them pick what works</span>
+              </button>
+              <button onClick={()=>setSendMode("fixed")} style={{ flex:1, padding:"10px", borderRadius:9, border:`2px solid ${sendMode==="fixed"?"#6366f1":"#e2e8f0"}`, background:sendMode==="fixed"?"#ede9fe":"#f8fafc", color:sendMode==="fixed"?"#4338ca":"#64748b", fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                📌 Fixed Time<br/><span style={{ fontSize:11, fontWeight:400 }}>One confirmed slot</span>
+              </button>
+            </div>
+
+            {/* SLOT MODE */}
+            {sendMode==="slots" && (
+              <div style={{ marginBottom:16 }}>
+                <label style={{ fontSize:13, fontWeight:600, color:"#475569", display:"block", marginBottom:8 }}>🗓️ Add your available slots <span style={{ fontWeight:400, color:"#94a3b8" }}>(your local time — auto-converts for contact)</span></label>
+
+                {/* Slot adder */}
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr auto", gap:10, marginBottom:12, alignItems:"end" }}>
+                  <div>
+                    <label style={{ fontSize:12, color:"#94a3b8", display:"block", marginBottom:4 }}>Date</label>
+                    <input type="date" value={slotDate} onChange={e=>setSlotDate(e.target.value)} min={today} style={{ width:"100%" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:12, color:"#94a3b8", display:"block", marginBottom:4 }}>Time ({agentTZ})</label>
+                    <select value={slotTime} onChange={e=>setSlotTime(e.target.value)} style={{ width:"100%" }}>
+                      <option value="">— Pick time —</option>
+                      {QUICK_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <button className="btn btn-primary" style={{ padding:"10px 16px", whiteSpace:"nowrap" }} onClick={addSlot} disabled={!slotDate||!slotTime}>+ Add</button>
+                </div>
+
+                {/* Slots list */}
+                {slots.length > 0 && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {[...slots].sort((a,b)=>a.date.localeCompare(b.date)||a.time.localeCompare(b.time)).map((s,i)=>{
+                      const converted = selectedC && agentTZ !== contactTZ ? convertTime(s.time, agentTZ, contactTZ) : null;
+                      return (
+                        <div key={s.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:9 }}>
+                          <div>
+                            <span style={{ fontSize:14, fontWeight:600, color:"#1e293b" }}>Slot {i+1}: {formatSlotDate(s.date)} · {s.time} {agentTZ}</span>
+                            {converted && <span style={{ fontSize:13, color:"#6366f1", marginLeft:10 }}>= {converted} {contactTZ} for {selectedC?.name?.split(" ")[0]}</span>}
+                          </div>
+                          <button onClick={()=>removeSlot(s.id)} style={{ background:"none", border:"none", color:"#ef4444", fontSize:16, cursor:"pointer" }}>✕</button>
+                        </div>
+                      );
+                    })}
+                    {slots.length < 2 && <div style={{ fontSize:12, color:"#f59e0b", padding:"6px 10px", background:"#fffbeb", borderRadius:6 }}>💡 Add at least 2-3 slots to give the prospect a real choice</div>}
+                  </div>
+                )}
+                {slots.length === 0 && <div style={{ textAlign:"center", padding:"20px", color:"#94a3b8", fontSize:13, background:"#f8fafc", borderRadius:8 }}>Add slots above — they'll appear in the message</div>}
+              </div>
+            )}
+
+            {/* FIXED MODE */}
+            {sendMode==="fixed" && (
+              <div style={{ marginBottom:16 }}>
+                <label style={{ fontSize:13, fontWeight:600, color:"#475569", display:"block", marginBottom:8 }}>📌 Confirmed time <span style={{ fontWeight:400, color:"#94a3b8" }}>(your local time)</span></label>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                  <div>
+                    <label style={{ fontSize:12, color:"#94a3b8", display:"block", marginBottom:4 }}>Date</label>
+                    <input type="date" value={fixedDate} onChange={e=>setFixedDate(e.target.value)} min={today} style={{ width:"100%" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize:12, color:"#94a3b8", display:"block", marginBottom:4 }}>Time ({agentTZ})</label>
+                    <select value={fixedTime} onChange={e=>setFixedTime(e.target.value)} style={{ width:"100%" }}>
+                      <option value="">— Pick time —</option>
+                      {QUICK_TIMES.map(t=><option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {selectedC && fixedTime && agentTZ !== contactTZ && (
+                  <div style={{ marginTop:8, padding:"8px 12px", background:"#ede9fe", borderRadius:8, fontSize:13, color:"#5b21b6" }}>
+                    ⚡ {selectedC.name.split(" ")[0]} will see this as <strong>{convertTime(fixedTime, agentTZ, contactTZ)} {contactTZ}</strong>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Meeting link */}
+            <div style={{ marginBottom:16 }}>
+              <label style={{ fontSize:13, fontWeight:600, color:"#475569", display:"block", marginBottom:6 }}>🔗 Meeting Link <span style={{ fontWeight:400, color:"#94a3b8" }}>(optional)</span></label>
+              <input value={meetingLink} onChange={e=>setMeetingLink(e.target.value)} placeholder="https://cal.com/yourname or https://zoom.us/j/…" style={{ width:"100%" }} />
+            </div>
+
+            {/* Message preview */}
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:"#475569", marginBottom:8 }}>👁️ Message Preview</div>
+              <div style={{ padding:"14px 16px", background:"#dcfce7", borderRadius:14, borderBottomRightRadius:4, fontSize:14, lineHeight:1.9, color:"#166534", whiteSpace:"pre-wrap", border:"1px solid #bbf7d0", minHeight:80 }}>
+                {finalMessage || <span style={{ color:"#94a3b8", fontStyle:"italic" }}>{selectedC ? (sendMode==="slots" ? "Add slots above to see preview…" : "Pick a date and time to see preview…") : "Select a contact to preview…"}</span>}
               </div>
             </div>
 
+            {/* Actions */}
             <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
               <button className="btn btn-ghost" onClick={()=>setSendModal(null)}>Cancel</button>
-              <button className="btn btn-green" style={{ opacity:selectedC?1:0.4 }} onClick={()=>{
-                if (!selectedC) return;
-                onSendQuick(selectedC, preview);
-                setSendModal(null);
-              }}>💬 Send Message</button>
+              <button style={{ padding:"11px 22px", borderRadius:9, border:"none", background: selectedC && finalMessage ? "#25d366" : "#94a3b8", color:"#fff", fontWeight:700, fontSize:15, cursor: selectedC && finalMessage ? "pointer" : "not-allowed", display:"flex", alignItems:"center", gap:8 }}
+                disabled={!selectedC || !finalMessage}
+                onClick={()=>{ if(!selectedC||!finalMessage) return; onSendQuick(selectedC, finalMessage); setSendModal(null); }}>
+                💬 Send Message
+              </button>
             </div>
+
           </div>
         </div>
       )}
     </div>
   );
 }
+
 
 // ─── CSV IMPORT MODAL ──────────────────────────────────────────────────────────
 const CSV_TEMPLATE_HEADERS = ["name","phone","email","company","source","budget","timeline","isDecisionMaker","interestLevel","leadStatus","assignedTo","notes"];
