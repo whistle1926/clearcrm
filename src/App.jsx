@@ -1,13 +1,75 @@
 import { useState, useEffect, useRef } from "react";
 
-// ─── USERS ─────────────────────────────────────────────────────────────────────
-// To change PINs, edit here. Admin PIN: 0000
-const USERS = [
-  { name: "Alex",   pin: "0000", role: "admin"  },
-  { name: "Jamie",  pin: "1111", role: "agent"  },
-  { name: "Sam",    pin: "2222", role: "agent"  },
-  { name: "Jordan", pin: "3333", role: "agent"  },
+// ─── ROLE DEFINITIONS ──────────────────────────────────────────────────────────
+const ROLE_PRESETS = {
+  admin: {
+    label: "Super Admin", color: "#6366f1", icon: "👑",
+    tabs: ["dashboard","contacts","pipeline","whatsapp","team","settings"],
+    canViewAllLeads: true, canReassign: true, canDeleteContacts: true,
+    canExport: true, canManageUsers: true, canViewAnalytics: true,
+  },
+  manager: {
+    label: "Team Manager", color: "#3b82f6", icon: "🏆",
+    tabs: ["dashboard","contacts","pipeline","whatsapp","team"],
+    canViewAllLeads: true, canReassign: true, canDeleteContacts: false,
+    canExport: true, canManageUsers: false, canViewAnalytics: true,
+  },
+  agent: {
+    label: "Sales Agent", color: "#10b981", icon: "💼",
+    tabs: ["dashboard","contacts","pipeline","whatsapp"],
+    canViewAllLeads: false, canReassign: false, canDeleteContacts: false,
+    canExport: false, canManageUsers: false, canViewAnalytics: false,
+  },
+  kyc: {
+    label: "KYC Officer", color: "#f59e0b", icon: "🔍",
+    tabs: ["contacts"],
+    canViewAllLeads: true, canReassign: false, canDeleteContacts: false,
+    canExport: true, canManageUsers: false, canViewAnalytics: false,
+  },
+  onboarding: {
+    label: "Onboarding", color: "#8b5cf6", icon: "🎓",
+    tabs: ["dashboard","contacts","whatsapp"],
+    canViewAllLeads: true, canReassign: false, canDeleteContacts: false,
+    canExport: false, canManageUsers: false, canViewAnalytics: false,
+  },
+  readonly: {
+    label: "Read Only", color: "#94a3b8", icon: "👁️",
+    tabs: ["dashboard","contacts","pipeline"],
+    canViewAllLeads: true, canReassign: false, canDeleteContacts: false,
+    canExport: false, canManageUsers: false, canViewAnalytics: true,
+  },
+};
+
+const ALL_TABS = [
+  { id:"dashboard", label:"Dashboard", icon:"📊" },
+  { id:"contacts",  label:"Contacts",  icon:"👥" },
+  { id:"pipeline",  label:"Pipeline",  icon:"🔄" },
+  { id:"whatsapp",  label:"WhatsApp",  icon:"💬" },
+  { id:"team",      label:"Team & Agents", icon:"👤" },
+  { id:"settings",  label:"Settings",  icon:"⚙️" },
 ];
+
+const DEFAULT_USERS = [
+  { id:1, name:"Alex",   pin:"0000", role:"admin",  department:"Management", jobTitle:"Director", email:"alex@company.com",   avatar:"", active:true,  customTabs:null, customPerms:null },
+  { id:2, name:"Jamie",  pin:"1111", role:"agent",  department:"Sales",      jobTitle:"Senior Agent", email:"jamie@company.com", avatar:"", active:true, customTabs:null, customPerms:null },
+  { id:3, name:"Sam",    pin:"2222", role:"agent",  department:"Sales",      jobTitle:"Sales Agent",  email:"sam@company.com",   avatar:"", active:true, customTabs:null, customPerms:null },
+  { id:4, name:"Jordan", pin:"3333", role:"agent",  department:"Sales",      jobTitle:"Sales Agent",  email:"jordan@company.com",avatar:"", active:true, customTabs:null, customPerms:null },
+];
+
+// Helper: get effective tabs & perms for a user
+function getUserPerms(user) {
+  const preset = ROLE_PRESETS[user.role] || ROLE_PRESETS.agent;
+  return {
+    tabs:  user.customTabs  ?? preset.tabs,
+    ...preset,
+    ...(user.customPerms ?? {}),
+  };
+}
+
+// ─── STATIC USERS fallback (for login screen) ─────────────────────────────────
+// Actual users are loaded from localStorage in App component
+const USERS = DEFAULT_USERS;
+
 
 // ─── SAMPLE DATA ───────────────────────────────────────────────────────────────
 const SAMPLE_CONTACTS = [
@@ -79,6 +141,13 @@ const BASE_STYLES = `
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
+  const [users, setUsers] = useState(() => {
+    try {
+      const saved = localStorage.getItem("clearcrm_users");
+      return saved ? JSON.parse(saved) : DEFAULT_USERS;
+    } catch { return DEFAULT_USERS; }
+  });
+
   const [contacts, setContacts] = useState(() => {
     try {
       const saved = localStorage.getItem("clearcrm_contacts");
@@ -89,15 +158,13 @@ export default function App() {
   const [waConfig, setWaConfig] = useState(() => {
     try {
       const saved = localStorage.getItem("clearcrm_waconfig");
+      const allNames = users.map(u=>u.name);
       return saved ? JSON.parse(saved) : {
         accessToken: "",
-        agents: Object.fromEntries(TEAM_MEMBERS.map(m => [m, { phoneNumberId:"", number:"", displayName:m }]))
+        agents: Object.fromEntries(allNames.map(m => [m, { phoneNumberId:"", number:"", displayName:m }]))
       };
     } catch {
-      return {
-        accessToken: "",
-        agents: Object.fromEntries(TEAM_MEMBERS.map(m => [m, { phoneNumberId:"", number:"", displayName:m }]))
-      };
+      return { accessToken: "", agents: Object.fromEntries(DEFAULT_USERS.map(u => [u.name, { phoneNumberId:"", number:"", displayName:u.name }])) };
     }
   });
 
@@ -105,29 +172,215 @@ export default function App() {
     try { return localStorage.getItem("clearcrm_claudekey") || ""; } catch { return ""; }
   });
 
-  useEffect(() => {
-    try { localStorage.setItem("clearcrm_contacts", JSON.stringify(contacts)); } catch {}
-  }, [contacts]);
+  useEffect(() => { try { localStorage.setItem("clearcrm_users", JSON.stringify(users)); } catch {} }, [users]);
+  useEffect(() => { try { localStorage.setItem("clearcrm_contacts", JSON.stringify(contacts)); } catch {} }, [contacts]);
+  useEffect(() => { try { localStorage.setItem("clearcrm_waconfig", JSON.stringify(waConfig)); } catch {} }, [waConfig]);
+  useEffect(() => { try { localStorage.setItem("clearcrm_claudekey", claudeApiKey); } catch {} }, [claudeApiKey]);
 
+  // Keep currentUser in sync if users array changes
   useEffect(() => {
-    try { localStorage.setItem("clearcrm_waconfig", JSON.stringify(waConfig)); } catch {}
-  }, [waConfig]);
+    if (currentUser) {
+      const updated = users.find(u => u.id === currentUser.id);
+      if (updated) setCurrentUser(updated);
+    }
+  }, [users]);
 
-  useEffect(() => {
-    try { localStorage.setItem("clearcrm_claudekey", claudeApiKey); } catch {}
-  }, [claudeApiKey]);
+  const handleLogin = (user) => {
+    const fresh = users.find(u => u.id === user.id) || user;
+    setCurrentUser(fresh);
+  };
 
-  if (!currentUser) return <LoginScreen onLogin={setCurrentUser} />;
-  return currentUser.role === "admin"
-    ? <AdminApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} claudeApiKey={claudeApiKey} setClaudeApiKey={setClaudeApiKey} />
-    : <AgentApp user={currentUser} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} claudeApiKey={claudeApiKey} />;
+  if (!currentUser) return <LoginScreen users={users} onLogin={handleLogin} />;
+
+  const perms = getUserPerms(currentUser);
+  const isAdmin = currentUser.role === "admin";
+
+  return isAdmin
+    ? <AdminApp user={currentUser} users={users} setUsers={setUsers} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} claudeApiKey={claudeApiKey} setClaudeApiKey={setClaudeApiKey} />
+    : <AgentApp user={currentUser} perms={perms} users={users} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} claudeApiKey={claudeApiKey} />;
+}
+
+// ─── USER MANAGEMENT PANEL ────────────────────────────────────────────────────
+function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [showAdd, setShowAdd] = useState(false);
+  const [newUser, setNewUser] = useState({ name:"", pin:"", role:"agent", department:"Sales", jobTitle:"", email:"", active:true });
+  const [expandedId, setExpandedId] = useState(null);
+
+  const startEdit = (u) => {
+    setEditingId(u.id);
+    setEditForm({ ...u, customTabs: u.customTabs ?? ROLE_PRESETS[u.role]?.tabs ?? [] });
+    setExpandedId(u.id);
+  };
+
+  const saveEdit = () => {
+    setUsers(prev => prev.map(u => u.id === editingId ? { ...u, ...editForm } : u));
+    setEditingId(null);
+    notify("✅ User updated");
+  };
+
+  const addUser = () => {
+    if (!newUser.name.trim() || newUser.pin.length !== 4) return;
+    if (users.find(u => u.pin === newUser.pin)) { notify("❌ PIN already in use"); return; }
+    const id = Date.now();
+    setUsers(prev => [...prev, { ...newUser, id, customTabs:null, customPerms:null }]);
+    setWaConfig(prev => ({ ...prev, agents: { ...prev.agents, [newUser.name]: { phoneNumberId:"", number:"", displayName:newUser.name } } }));
+    setNewUser({ name:"", pin:"", role:"agent", department:"Sales", jobTitle:"", email:"", active:true });
+    setShowAdd(false);
+    notify(`✅ ${newUser.name} added to team`);
+  };
+
+  const setF = (k, v) => setEditForm(f => ({ ...f, [k]: v }));
+  const toggleTab = (tab) => {
+    const curr = editForm.customTabs || [];
+    setF("customTabs", curr.includes(tab) ? curr.filter(t=>t!==tab) : [...curr, tab]);
+  };
+
+  return (
+    <div className="card" style={{ padding:24, marginBottom:20 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36, height:36, background:"#6366f122", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>👥</div>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700 }}>Team & Permissions</div>
+            <div style={{ fontSize:13, color:"#64748b" }}>Manage users, roles and what each person can see</div>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={()=>setShowAdd(true)}>+ Add Member</button>
+      </div>
+
+      {/* Role legend */}
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:20 }}>
+        {Object.entries(ROLE_PRESETS).map(([key,r])=>(
+          <span key={key} className="pill" style={{ background:`${r.color}18`, color:r.color, fontSize:12 }}>{r.icon} {r.label}</span>
+        ))}
+      </div>
+
+      {/* User rows */}
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {users.map(u => {
+          const preset = ROLE_PRESETS[u.role] || ROLE_PRESETS.agent;
+          const isEditing = editingId === u.id;
+          const effectiveTabs = u.customTabs ?? preset.tabs;
+
+          return (
+            <div key={u.id} style={{ border:`2px solid ${isEditing?"#6366f1":"#e2e8f0"}`, borderRadius:12, overflow:"hidden", transition:"border-color 0.2s", opacity:u.active===false?0.55:1 }}>
+              {/* Row header */}
+              <div style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 18px", background:isEditing?"#f8f7ff":"#fff" }}>
+                <div style={{ width:40, height:40, borderRadius:10, background:`${preset.color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, flexShrink:0 }}>{preset.icon}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                    <span style={{ fontSize:15, fontWeight:700 }}>{u.name}</span>
+                    <span className="pill" style={{ background:`${preset.color}18`, color:preset.color, fontSize:11 }}>{preset.label}</span>
+                    {u.active===false && <span className="pill" style={{ background:"#fee2e2", color:"#dc2626", fontSize:11 }}>Inactive</span>}
+                    {u.customTabs && <span className="pill" style={{ background:"#ede9fe", color:"#6366f1", fontSize:11 }}>⚡ custom tabs</span>}
+                  </div>
+                  <div style={{ fontSize:13, color:"#64748b", marginTop:2 }}>
+                    {[u.jobTitle, u.department, u.email].filter(Boolean).join(" · ")}
+                  </div>
+                  <div style={{ fontSize:12, color:"#94a3b8", marginTop:3 }}>
+                    Sees: {effectiveTabs.map(t=>{ const tab=ALL_TABS.find(x=>x.id===t); return tab?`${tab.icon} ${tab.label}`:""; }).join("  ")}
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:8, flexShrink:0 }}>
+                  <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 12px" }} onClick={()=>startEdit(u)}>✏️ Edit</button>
+                  <button className="btn btn-ghost" style={{ fontSize:12, padding:"6px 12px", color:u.active===false?"#10b981":"#94a3b8" }}
+                    onClick={()=>{ setUsers(p=>p.map(x=>x.id===u.id?{...x,active:!x.active}:x)); notify(u.active===false?`✅ ${u.name} reactivated`:`⏸️ ${u.name} deactivated`); }}>
+                    {u.active===false ? "↩ Reactivate" : "Deactivate"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Edit form */}
+              {isEditing && (
+                <div style={{ padding:"20px 18px", background:"#f8f7ff", borderTop:"1px solid #e2e8f0" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:16 }}>
+                    {[["name","Name","text","e.g. Chris Murphy"],["pin","PIN (4 digits)","text",""],["jobTitle","Job Title","text","e.g. KYC Officer"],["department","Department","text","Sales, KYC…"],["email","Email","email","name@company.com"]].map(([k,label,type,ph])=>(
+                      <div key={k}>
+                        <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:5 }}>{label}</label>
+                        <input type={type} value={editForm[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph} style={{ width:"100%", fontFamily:k==="pin"?"DM Mono,monospace":"inherit" }} maxLength={k==="pin"?4:undefined} />
+                      </div>
+                    ))}
+                    <div>
+                      <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:5 }}>Role</label>
+                      <select value={editForm.role||"agent"} onChange={e=>{ setF("role",e.target.value); setF("customTabs", ROLE_PRESETS[e.target.value]?.tabs ?? []); }} style={{ width:"100%" }}>
+                        {Object.entries(ROLE_PRESETS).map(([k,r])=><option key={k} value={k}>{r.icon} {r.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Tab toggle */}
+                  <div style={{ marginBottom:16 }}>
+                    <div style={{ fontSize:13, fontWeight:600, color:"#475569", marginBottom:8 }}>🗂️ Visible Tabs <span style={{ fontWeight:400, color:"#94a3b8", fontSize:12 }}>— tick what this person can see</span></div>
+                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                      {ALL_TABS.map(tab => {
+                        const on = (editForm.customTabs||[]).includes(tab.id);
+                        return (
+                          <button key={tab.id} onClick={()=>toggleTab(tab.id)}
+                            style={{ padding:"8px 14px", borderRadius:8, border:`2px solid ${on?"#6366f1":"#e2e8f0"}`, background:on?"#ede9fe":"#f8fafc", color:on?"#4338ca":"#64748b", fontSize:13, fontWeight:on?700:400, cursor:"pointer" }}>
+                            {tab.icon} {tab.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ marginTop:6, fontSize:12, color:"#94a3b8" }}>Default for {ROLE_PRESETS[editForm.role]?.label}: {(ROLE_PRESETS[editForm.role]?.tabs||[]).map(t=>ALL_TABS.find(x=>x.id===t)?.label).join(", ")}</div>
+                  </div>
+
+                  <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+                    <button className="btn btn-ghost" onClick={()=>setEditingId(null)}>Cancel</button>
+                    <button className="btn btn-primary" onClick={saveEdit}>Save Changes</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add member modal */}
+      {showAdd && (
+        <div className="overlay" onClick={()=>setShowAdd(false)}>
+          <div className="modal" onClick={e=>e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:20 }}>
+              <div style={{ fontSize:17, fontWeight:700 }}>Add Team Member</div>
+              <button className="btn btn-ghost" style={{ padding:"4px 10px" }} onClick={()=>setShowAdd(false)}>✕</button>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+              {[["name","Full Name *","text","Chris Murphy"],["pin","PIN (4 digits) *","text",""],["jobTitle","Job Title","text","e.g. KYC Officer"],["department","Department","text","Sales, KYC, Onboarding…"],["email","Email","email","name@company.com"]].map(([k,label,type,ph])=>(
+                <div key={k}>
+                  <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5 }}>{label}</label>
+                  <input type={type} value={newUser[k]||""} onChange={e=>setNewUser(f=>({...f,[k]:e.target.value}))} placeholder={ph} style={{ width:"100%", fontFamily:k==="pin"?"DM Mono,monospace":"inherit" }} maxLength={k==="pin"?4:undefined} />
+                </div>
+              ))}
+              <div>
+                <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5 }}>Role *</label>
+                <select value={newUser.role} onChange={e=>setNewUser(f=>({...f,role:e.target.value}))} style={{ width:"100%" }}>
+                  {Object.entries(ROLE_PRESETS).map(([k,r])=><option key={k} value={k}>{r.icon} {r.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ padding:"12px 16px", background:"#ede9fe", borderRadius:8, fontSize:13, color:"#5b21b6", marginBottom:16 }}>
+              {(() => { const r = ROLE_PRESETS[newUser.role]; return `${r.icon} ${r.label} — will see: ${r.tabs.map(t=>ALL_TABS.find(x=>x.id===t)?.label).join(", ")}`; })()}
+            </div>
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+              <button className="btn btn-ghost" onClick={()=>setShowAdd(false)}>Cancel</button>
+              <button className="btn btn-primary" style={{ opacity:newUser.name&&newUser.pin.length===4?1:0.5 }} onClick={addUser}>Add Member</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── LOGIN ─────────────────────────────────────────────────────────────────────
-function LoginScreen({ onLogin }) {
+function LoginScreen({ users, onLogin }) {
   const [pin, setPin] = useState(["", "", "", ""]);
   const [error, setError] = useState("");
   const [shake, setShake] = useState(false);
+
+  const activeUsers = users.filter(u => u.active !== false);
 
   const handleChange = (i, val) => {
     if (!/^\d?$/.test(val)) return;
@@ -135,7 +388,7 @@ function LoginScreen({ onLogin }) {
     if (val && i < 3) document.getElementById(`pin-${i+1}`)?.focus();
     const full = next.join("");
     if (full.length === 4) {
-      const user = USERS.find(u => u.pin === full);
+      const user = activeUsers.find(u => u.pin === full);
       if (user) { setTimeout(() => onLogin(user), 150); }
       else { setShake(true); setError("Incorrect PIN — try again."); setPin(["","","",""]); setTimeout(() => { setShake(false); document.getElementById("pin-0")?.focus(); }, 600); }
     }
@@ -163,18 +416,23 @@ function LoginScreen({ onLogin }) {
           {error && <div style={{ color: "#ef4444", fontSize: 14, marginBottom: 8 }}>{error}</div>}
           <div style={{ fontSize: 13, color: "#475569" }}>Each team member has a unique PIN</div>
         </div>
-        {/* Demo hint card */}
         <div style={{ background: "#fff", border: "1px solid #1f2330", borderRadius: 12, padding: 16, textAlign: "left" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 10, letterSpacing: 1 }}>DEMO PINS</div>
-          {USERS.map(u => (
-            <div key={u.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #1a1d26" }}>
-              <span style={{ fontSize: 14, color: "#64748b" }}>{u.name}</span>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontFamily: "DM Mono,monospace", fontSize: 14, color: "#6366f1", fontWeight: 600 }}>{u.pin}</span>
-                <span className="pill" style={{ background: u.role === "admin" ? "#6366f122" : "#10b98122", color: u.role === "admin" ? "#818cf8" : "#10b981", fontSize: 11 }}>{u.role}</span>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 10, letterSpacing: 1 }}>TEAM PINS</div>
+          {activeUsers.map(u => {
+            const preset = ROLE_PRESETS[u.role] || ROLE_PRESETS.agent;
+            return (
+              <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #1a1d26" }}>
+                <div>
+                  <span style={{ fontSize: 14, color: "#64748b" }}>{u.name}</span>
+                  {u.jobTitle && <span style={{ fontSize:11, color:"#94a3b8", marginLeft:6 }}>{u.jobTitle}</span>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontFamily: "DM Mono,monospace", fontSize: 14, color: "#6366f1", fontWeight: 600 }}>{u.pin}</span>
+                  <span className="pill" style={{ background: `${preset.color}22`, color: preset.color, fontSize: 11 }}>{preset.icon} {preset.label}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -615,7 +873,7 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
 }
 
 // ─── ADMIN APP ─────────────────────────────────────────────────────────────────
-function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig, claudeApiKey, setClaudeApiKey }) {
+function AdminApp({ user, users, setUsers, contacts, setContacts, onLogout, waConfig, setWaConfig, claudeApiKey, setClaudeApiKey }) {
   const [view, setView] = useState("dashboard");
   const [checklist, setChecklist] = useState({ fb:false, dev:false, verify:false, numbers:false, token:false, test:false, webhook:false });
   const [selectedContact, setSelectedContact] = useState(null);
@@ -945,9 +1203,11 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
         {view==="settings" && (
           <div style={{ padding:28 }} className="fade-in">
             <h1 style={{ fontSize:22, fontWeight:700, marginBottom:6 }}>Settings</h1>
-            <p style={{ color:"#64748b", fontSize:14, marginBottom:24 }}>Configure API credentials and system settings.</p>
+            <p style={{ color:"#64748b", fontSize:14, marginBottom:24 }}>Manage your team, roles, permissions and API credentials.</p>
 
-            {/* Claude AI API Key */}
+            {/* ── USER MANAGEMENT ── */}
+            <UserManagementPanel users={users} setUsers={setUsers} notify={notify} waConfig={waConfig} setWaConfig={setWaConfig} />
+
             <div className="card" style={{ padding:24, marginBottom:20 }}>
               <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
                 <div style={{ width:36, height:36, background:"#6366f122", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>✨</div>
@@ -1198,7 +1458,9 @@ function AdminApp({ user, contacts, setContacts, onLogout, waConfig, setWaConfig
     </div>
   );
 }
-function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
+function AgentApp({ user, perms, users, contacts, setContacts, onLogout, waConfig }) {
+  const defaultTab = perms?.tabs?.[0] || "contacts";
+  const [agentView, setAgentView] = useState(defaultTab);
   const [selectedContact, setSelectedContact] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -1206,13 +1468,16 @@ function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
   const [waMessage, setWaMessage] = useState("");
   const { notify, NotificationEl } = useNotify();
 
-  const myLeads = contacts
-    .filter(c => c.assignedTo === user.name)
-    .filter(c => {
-      const q = searchQuery.toLowerCase();
-      return (!q || c.name.toLowerCase().includes(q) || c.company.toLowerCase().includes(q) || c.phone.includes(q))
-        && (filterStatus==="All" || c.leadStatus===filterStatus);
-    });
+  // Respect canViewAllLeads permission
+  const visibleLeads = perms?.canViewAllLeads
+    ? contacts
+    : contacts.filter(c => c.assignedTo === user.name);
+
+  const myLeads = visibleLeads.filter(c => {
+    const q = searchQuery.toLowerCase();
+    return (!q || c.name.toLowerCase().includes(q) || c.company.toLowerCase().includes(q) || (c.phone||"").includes(q))
+      && (filterStatus==="All" || c.leadStatus===filterStatus);
+  });
 
   const today = new Date().toISOString().split("T")[0];
   const todaysCalls = myLeads.filter(c => c.callDate===today && c.callStatus==="booked");
@@ -1286,52 +1551,73 @@ function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
       <style>{BASE_STYLES}</style>
       {NotificationEl}
 
-      {/* Agent top bar */}
-      <div style={{ background:"#f8fafc", borderBottom:"1px solid #f1f5f9", padding:"14px 28px", display:"flex", alignItems:"center", gap:14 }}>
-        <div style={{ width:34, height:34, background:"linear-gradient(135deg,#10b981,#059669)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, fontWeight:700 }}>{user.name[0]}</div>
-        <div>
-          <div style={{ fontSize:15, fontWeight:700 }}>{user.name}</div>
-          <div style={{ fontSize:12, color:"#10b981" }}>Agent · My Leads Only</div>
+      {/* Top bar */}
+      <div style={{ background:"#fff", borderBottom:"1px solid #e2e8f0", padding:"0 28px", display:"flex", alignItems:"center", gap:0 }}>
+        {/* Logo */}
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"14px 0", marginRight:24, borderRight:"1px solid #e2e8f0", paddingRight:24 }}>
+          <div style={{ width:32, height:32, background:"linear-gradient(135deg,#6366f1,#8b5cf6)", borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, fontWeight:700, color:"#fff" }}>C</div>
+          <span style={{ fontSize:15, fontWeight:700 }}>ClearCRM</span>
         </div>
-        <div style={{ marginLeft:"auto", display:"flex", gap:24 }}>
-          {[["My Leads",myLeads.length,"#6366f1"],["Today's Calls",todaysCalls.length,"#10b981"],["Hot (A)",hotLeads.length,"#f59e0b"],["No Shows",noShows.length,"#f97316"]].map(([l,v,c]) => (
-            <div key={l} style={{ textAlign:"center" }}>
-              <div style={{ fontSize:20, fontWeight:700, color:c }}>{v}</div>
-              <div style={{ fontSize:11, color:"#64748b" }}>{l}</div>
+
+        {/* Tab nav — only permitted tabs */}
+        <div style={{ display:"flex", flex:1, gap:0 }}>
+          {(perms?.tabs || ["contacts"]).map(tabId => {
+            const tab = ALL_TABS.find(t=>t.id===tabId);
+            if (!tab) return null;
+            return (
+              <button key={tabId} onClick={()=>setAgentView(tabId)}
+                style={{ padding:"16px 18px", border:"none", borderBottom:`3px solid ${agentView===tabId?"#6366f1":"transparent"}`, background:"transparent", color:agentView===tabId?"#6366f1":"#64748b", fontSize:14, fontWeight:agentView===tabId?700:400, cursor:"pointer", whiteSpace:"nowrap" }}>
+                {tab.icon} {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* User info + logout */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 0" }}>
+          {(() => { const preset=ROLE_PRESETS[user.role]||ROLE_PRESETS.agent; return (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ width:32, height:32, borderRadius:9, background:`${preset.color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15 }}>{preset.icon}</div>
+              <div>
+                <div style={{ fontSize:14, fontWeight:700 }}>{user.name}</div>
+                <div style={{ fontSize:11, color:preset.color }}>{user.jobTitle||preset.label}</div>
+              </div>
             </div>
-          ))}
+          );})()}
           <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={onLogout}>🚪 Log Out</button>
         </div>
       </div>
 
       <div style={{ padding:28 }}>
         {/* Alerts */}
-        {todaysCalls.length > 0 && (
+        {agentView==="contacts" && todaysCalls.length > 0 && (
           <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:12, padding:"14px 18px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
             <span style={{ fontSize:22 }}>📞</span>
             <div><div style={{ fontSize:15, fontWeight:600, color:"#10b981" }}>You have {todaysCalls.length} call{todaysCalls.length>1?"s":""} today</div><div style={{ fontSize:13, color:"#64748b" }}>{todaysCalls.map(c=>`${c.name} at ${c.callTime} ${c.timezone}`).join(" · ")}</div></div>
           </div>
         )}
-        {noShows.length > 0 && (
+        {agentView==="contacts" && noShows.length > 0 && (
           <div style={{ background:"#fff7ed", border:"1px solid #fed7aa", borderRadius:12, padding:"14px 18px", marginBottom:16, display:"flex", alignItems:"center", gap:12 }}>
             <span style={{ fontSize:22 }}>⚠️</span>
             <div><div style={{ fontSize:15, fontWeight:600, color:"#f97316" }}>{noShows.length} no-show{noShows.length>1?"s":""} need follow-up</div><div style={{ fontSize:13, color:"#64748b" }}>{noShows.map(c=>c.name).join(", ")}</div></div>
           </div>
         )}
 
+        {/* CONTACTS VIEW */}
+        {agentView==="contacts" && (<div>
         {/* Team leaderboard */}
         <div className="card" style={{ padding:20, marginBottom:20 }}>
           <div style={{ fontSize:13, fontWeight:600, color:"#64748b", marginBottom:14 }}>🏆 TEAM LEADERBOARD</div>
-          <div style={{ display:"flex", gap:12 }}>
-            {TEAM_MEMBERS.map((name, i) => {
-              const leads = contacts.filter(c => c.assignedTo === name);
+          <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+            {users.filter(u=>u.active!==false).map((u, i) => {
+              const leads = contacts.filter(c => c.assignedTo === u.name);
               const completed = leads.filter(c => c.leadStatus === "Completed").length;
               const hot = leads.filter(c => c.category === "A").length;
-              const isMe = name === user.name;
+              const isMe = u.name === user.name;
               return (
-                <div key={name} style={{ flex:1, background: isMe ? "#ede9fe" : "#f8fafc", border:`1px solid ${isMe?"#6366f1":"#e2e8f0"}`, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
-                  <div style={{ fontSize:18, marginBottom:4 }}>{["🥇","🥈","🥉","4️⃣"][i]}</div>
-                  <div style={{ fontSize:14, fontWeight:700, color: isMe ? "#6366f1" : "#1e293b" }}>{name}{isMe && " (you)"}</div>
+                <div key={u.name} style={{ flex:1, minWidth:120, background: isMe ? "#ede9fe" : "#f8fafc", border:`1px solid ${isMe?"#6366f1":"#e2e8f0"}`, borderRadius:10, padding:"12px 14px", textAlign:"center" }}>
+                  <div style={{ fontSize:18, marginBottom:4 }}>{["🥇","🥈","🥉","4️⃣","5️⃣","6️⃣"][i]||"·"}</div>
+                  <div style={{ fontSize:14, fontWeight:700, color: isMe ? "#6366f1" : "#1e293b" }}>{u.name}{isMe && " (you)"}</div>
                   <div style={{ fontSize:22, fontWeight:800, color:"#10b981", margin:"6px 0" }}>{leads.length}</div>
                   <div style={{ fontSize:11, color:"#64748b" }}>leads</div>
                   <div style={{ fontSize:12, color:"#64748b", marginTop:6 }}>✅ {completed} closed · 🔥 {hot} hot</div>
@@ -1343,7 +1629,7 @@ function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
 
         {/* Search + filter */}
         <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
-          <input placeholder="Search your leads…" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} style={{ flex:1, minWidth:200 }} />
+          <input placeholder={perms?.canViewAllLeads ? "Search all leads…" : "Search your leads…"} value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} style={{ flex:1, minWidth:200 }} />
           <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}><option value="All">All Statuses</option>{WORKFLOW_STAGES.map(s=><option key={s}>{s}</option>)}</select>
         </div>
 
@@ -1351,7 +1637,7 @@ function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
         {myLeads.length === 0 && (
           <div style={{ textAlign:"center", padding:80, color:"#64748b" }}>
             <div style={{ fontSize:40, marginBottom:12 }}>📭</div>
-            <div style={{ fontSize:16, fontWeight:600, marginBottom:6 }}>No leads assigned to you yet</div>
+            <div style={{ fontSize:16, fontWeight:600, marginBottom:6 }}>{perms?.canViewAllLeads ? "No leads found" : "No leads assigned to you yet"}</div>
             <div style={{ fontSize:14 }}>Your admin will assign leads to you shortly.</div>
           </div>
         )}
@@ -1382,6 +1668,88 @@ function AgentApp({ user, contacts, setContacts, onLogout, waConfig }) {
             </div>
           ))}
         </div>
+        </div>)} {/* end contacts view */}
+
+        {/* DASHBOARD VIEW */}
+        {agentView==="dashboard" && (
+          <div>
+            <div style={{ fontSize:18, fontWeight:700, marginBottom:20 }}>👋 Welcome back, {user.name}</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:16, marginBottom:20 }}>
+              {[
+                ["My Leads", contacts.filter(c=>c.assignedTo===user.name).length, "#6366f1","👥"],
+                ["Today's Calls", contacts.filter(c=>c.assignedTo===user.name&&c.callDate===new Date().toISOString().split("T")[0]&&c.callStatus==="booked").length, "#10b981","📞"],
+                ["Hot Leads", contacts.filter(c=>c.assignedTo===user.name&&c.category==="A").length, "#f59e0b","🔥"],
+              ].map(([l,v,color,icon])=>(
+                <div key={l} className="stat-card" style={{ borderLeft:`4px solid ${color}` }}>
+                  <div style={{ fontSize:28 }}>{icon}</div>
+                  <div style={{ fontSize:28, fontWeight:800, color, margin:"8px 0" }}>{v}</div>
+                  <div style={{ fontSize:13, color:"#64748b" }}>{l}</div>
+                </div>
+              ))}
+            </div>
+            <div className="card" style={{ padding:20 }}>
+              <div style={{ fontSize:14, fontWeight:600, color:"#64748b", marginBottom:12 }}>TODAY'S SCHEDULE</div>
+              {contacts.filter(c=>c.assignedTo===user.name&&c.callDate===new Date().toISOString().split("T")[0]).length === 0
+                ? <div style={{ color:"#94a3b8", fontSize:14 }}>No calls scheduled for today</div>
+                : contacts.filter(c=>c.assignedTo===user.name&&c.callDate===new Date().toISOString().split("T")[0]).map(c=>(
+                    <div key={c.id} style={{ padding:"10px 0", borderBottom:"1px solid #f1f5f9", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                      <div><span style={{ fontWeight:600 }}>{c.name}</span><span style={{ color:"#64748b", marginLeft:8, fontSize:13 }}>{c.company}</span></div>
+                      <span style={{ color:"#6366f1", fontWeight:600 }}>{c.callTime} {c.timezone}</span>
+                    </div>
+                  ))
+              }
+            </div>
+          </div>
+        )}
+
+        {/* PIPELINE VIEW for non-admin */}
+        {agentView==="pipeline" && (
+          <div>
+            <div style={{ fontSize:18, fontWeight:700, marginBottom:20 }}>🔄 My Pipeline</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:16 }}>
+              {WORKFLOW_STAGES.map(stage => {
+                const stageLeads = contacts.filter(c=>c.assignedTo===user.name&&c.leadStatus===stage);
+                return (
+                  <div key={stage} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:12, padding:16 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#64748b", marginBottom:12 }}>{stage} <span style={{ color:"#94a3b8" }}>({stageLeads.length})</span></div>
+                    {stageLeads.map(c=>(
+                      <div key={c.id} style={{ padding:"8px 10px", background:"#f8fafc", borderRadius:8, marginBottom:8, cursor:"pointer" }} onClick={()=>{ setSelectedContact(c); }}>
+                        <div style={{ fontSize:13, fontWeight:600 }}>{c.name}</div>
+                        <div style={{ fontSize:12, color:"#94a3b8" }}>{c.company}</div>
+                      </div>
+                    ))}
+                    {stageLeads.length===0&&<div style={{ fontSize:12, color:"#94a3b8" }}>No leads</div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* WHATSAPP VIEW for non-admin */}
+        {agentView==="whatsapp" && (
+          <div>
+            <div style={{ fontSize:18, fontWeight:700, marginBottom:20 }}>💬 My WhatsApp</div>
+            <div className="card" style={{ padding:20 }}>
+              {contacts.filter(c=>c.assignedTo===user.name&&c.whatsappHistory?.length>0).length===0
+                ? <div style={{ textAlign:"center", padding:40, color:"#94a3b8" }}>No conversations yet</div>
+                : contacts.filter(c=>c.assignedTo===user.name&&c.whatsappHistory?.length>0).map(c=>{
+                    const last=c.whatsappHistory[c.whatsappHistory.length-1];
+                    return (
+                      <div key={c.id} style={{ display:"flex", gap:12, padding:"12px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer", alignItems:"center" }} onClick={()=>setSelectedContact(c)}>
+                        <div style={{ width:44,height:44,background:"#25d366",borderRadius:50,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0 }}>💬</div>
+                        <div style={{ flex:1,overflow:"hidden" }}>
+                          <div style={{ display:"flex",justifyContent:"space-between" }}><span style={{ fontSize:15,fontWeight:600 }}>{c.name}</span><span style={{ fontSize:12,color:"#64748b" }}>{last.time?.split(" ")[0]}</span></div>
+                          <div style={{ fontSize:13,color:"#64748b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{last.msg}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          </div>
+        )}
+
       </div>
 
       {showWAModal && <WAModal contact={showWAModal} waMessage={waMessage} setWaMessage={setWaMessage} onSend={()=>sendWhatsApp(showWAModal,waMessage)} onClose={()=>setShowWAModal(null)} />}
