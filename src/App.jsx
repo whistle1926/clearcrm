@@ -3883,17 +3883,15 @@ function ZoomTab({ config, save, notify, users, contacts, setContacts }) {
   const createTestMeeting = async () => {
     setCreating(true); setNewMeeting(null);
     try {
-      const tok = await getZoomToken(accountId, clientId, clientSecret);
-      const res = await fetch("https://api.zoom.us/v2/users/me/meetings", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ topic: "ClearCRM Test Meeting", type: 1, settings: { join_before_host: true, waiting_room: false } }),
+      const result = await createZoomMeeting({
+        accountId, clientId, clientSecret,
+        agentEmail: agentEmails[Object.keys(agentEmails)[0]] || "",
+        topic: "ClearCRM Test Meeting",
+        startTime: null,
+        duration: 60,
       });
-      const data = await res.json();
-      if (data.join_url) {
-        setNewMeeting(data.join_url);
-        notify("🎥 Test meeting created!");
-      } else throw new Error(data.message || "Failed");
+      setNewMeeting(result.joinUrl);
+      notify("🎥 Test meeting created!");
     } catch (e) { notify(`❌ ${e.message}`); }
     setCreating(false);
   };
