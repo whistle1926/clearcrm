@@ -43,6 +43,8 @@ function dbToContact(r) {
     lastCallDuration: r.last_call_duration||null,
     lastCallOutcome: r.last_call_outcome||null,
     totalCalls: r.total_calls||0,
+    zoomMeetingId: r.zoom_meeting_id||null,
+    zoomStatus: r.zoom_status||null,
   };
 }
 
@@ -72,6 +74,8 @@ function contactToDb(c) {
   if (c.category       !== undefined) r.category           = c.category;
   if (c.whatsappHistory!== undefined) r.whatsapp_history   = c.whatsappHistory;
   if (c.kycStatus      !== undefined) r.kyc_status         = c.kycStatus;
+  if (c.zoomMeetingId  !== undefined) r.zoom_meeting_id    = c.zoomMeetingId;
+  if (c.zoomStatus     !== undefined) r.zoom_status        = c.zoomStatus;
   return r;
 }
 
@@ -1126,7 +1130,27 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
                 <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Time</label><input type="time" value={c.callTime||""} onChange={e => updateContact(c.id,{callTime:e.target.value})} style={{ width: "100%" }} /></div>
                 <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Timezone</label><input value={c.timezone||""} onChange={e => updateContact(c.id,{timezone:e.target.value})} placeholder="EST" style={{ width: "100%" }} /></div>
               </div>
-              <div><label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Meeting Link</label><input value={c.meetingLink||""} onChange={e => updateContact(c.id,{meetingLink:e.target.value})} placeholder="https://cal.com/…" style={{ width: "100%" }} /></div>
+              <div>
+                <label style={{ fontSize: 14, color: "#64748b", display: "block", marginBottom: 6 }}>Meeting Link</label>
+                <div style={{ display:"flex", gap:8 }}>
+                  <input value={c.meetingLink||""} onChange={e => updateContact(c.id,{meetingLink:e.target.value})} placeholder="https://zoom.us/j/…" style={{ flex:1 }} />
+                  {c.meetingLink && (
+                    <a href={c.meetingLink} target="_blank" rel="noreferrer"
+                      style={{ padding:"8px 12px",borderRadius:8,background:"#2D8CFF",color:"#fff",fontSize:13,fontWeight:600,textDecoration:"none",whiteSpace:"nowrap" }}>
+                      🎥 Join
+                    </a>
+                  )}
+                </div>
+                <ZoomInstantButton contact={c} updateContact={updateContact} notify={notify} />
+                {c.zoomStatus && (
+                  <div style={{ marginTop:6, display:"flex", alignItems:"center", gap:6 }}>
+                    <span style={{ width:8,height:8,borderRadius:"50%",background:c.zoomStatus==="started"?"#10b981":c.zoomStatus==="ended"?"#94a3b8":"#2D8CFF",display:"inline-block" }}/>
+                    <span style={{ fontSize:12,color:"#64748b" }}>
+                      Zoom: {c.zoomStatus==="started"?"🟢 Live now":c.zoomStatus==="ended"?"✅ Ended":"📅 Scheduled"}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           <div className="card" style={{ padding: 24 }}>
@@ -3627,11 +3651,12 @@ function IntegrationsPanel({ notify, contacts, setContacts, users }) {
   };
 
   const TABS = [
-    { id:"supabase",  label:"Supabase",  icon:"🗄️",  color:"#3ecf8e" },
-    { id:"calendly",  label:"Calendly",  icon:"📅",  color:"#006bff" },
-    { id:"sumsub",    label:"Sumsub KYC",icon:"🔍",  color:"#f59e0b" },
-    { id:"cloudtalk", label:"Cloudtalk", icon:"📞",  color:"#6366f1" },
-    { id:"status",    label:"Live Status",icon:"🟢", color:"#10b981" },
+    { id:"supabase",  label:"Supabase",   icon:"🗄️",  color:"#3ecf8e" },
+    { id:"calendly",  label:"Calendly",   icon:"📅",  color:"#006bff" },
+    { id:"zoom",      label:"Zoom",       icon:"🎥",  color:"#2D8CFF" },
+    { id:"sumsub",    label:"Sumsub KYC", icon:"🔍",  color:"#f59e0b" },
+    { id:"cloudtalk", label:"Cloudtalk",  icon:"📞",  color:"#6366f1" },
+    { id:"status",    label:"Live Status",icon:"🟢",  color:"#10b981" },
   ];
 
   return (
@@ -3641,7 +3666,7 @@ function IntegrationsPanel({ notify, contacts, setContacts, users }) {
         <div style={{ width:36,height:36,background:"#10b98122",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18 }}>🔌</div>
         <div>
           <div style={{ fontSize:15,fontWeight:700 }}>Integrations</div>
-          <div style={{ fontSize:13,color:"#64748b" }}>Connect Supabase, Calendly, Sumsub KYC and Cloudtalk</div>
+          <div style={{ fontSize:13,color:"#64748b" }}>Connect Supabase, Calendly, Zoom, Sumsub KYC and Cloudtalk</div>
         </div>
       </div>
 
@@ -3663,6 +3688,11 @@ function IntegrationsPanel({ notify, contacts, setContacts, users }) {
       {/* ── CALENDLY ── */}
       {activeTab==="calendly" && (
         <CalendlyTab config={config.calendly||{}} save={v=>save("calendly",v)} notify={notify} users={users} />
+      )}
+
+      {/* ── ZOOM ── */}
+      {activeTab==="zoom" && (
+        <ZoomTab config={config.zoom||{}} save={v=>save("zoom",v)} notify={notify} users={users} contacts={contacts} setContacts={setContacts} />
       )}
 
       {/* ── SUMSUB ── */}
@@ -3822,6 +3852,208 @@ function CalendlyTab({ config, save, notify, users }) {
 }
 
 // ─── SUMSUB TAB ───────────────────────────────────────────────────────────────
+// ─── ZOOM TAB ─────────────────────────────────────────────────────────────────
+function ZoomTab({ config, save, notify, users, contacts, setContacts }) {
+  const [clientId,     setClientId]     = useState(config.clientId     || "");
+  const [clientSecret, setClientSecret] = useState(config.clientSecret || "");
+  const [accountId,    setAccountId]    = useState(config.accountId    || "");
+  const [agentEmails,  setAgentEmails]  = useState(config.agentEmails  || {});
+  const [testing,      setTesting]      = useState(false);
+  const [testResult,   setTestResult]   = useState("");
+  const [creating,     setCreating]     = useState(false);
+  const [newMeeting,   setNewMeeting]   = useState(null);
+
+  // Test connection via Zoom Server-to-Server OAuth
+  const testConnection = async () => {
+    if (!clientId || !clientSecret || !accountId) { notify("❌ Fill in all three fields first"); return; }
+    setTesting(true); setTestResult("");
+    try {
+      const tok = await getZoomToken(accountId, clientId, clientSecret);
+      if (tok) {
+        setTestResult("✅ Connected — Zoom OAuth working");
+        save({ clientId, clientSecret, accountId, agentEmails, connected: true });
+      }
+    } catch (e) {
+      setTestResult(`❌ ${e.message}`);
+    }
+    setTesting(false);
+  };
+
+  // Create an instant meeting for a demo/test
+  const createTestMeeting = async () => {
+    setCreating(true); setNewMeeting(null);
+    try {
+      const tok = await getZoomToken(accountId, clientId, clientSecret);
+      const res = await fetch("https://api.zoom.us/v2/users/me/meetings", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: "ClearCRM Test Meeting", type: 1, settings: { join_before_host: true, waiting_room: false } }),
+      });
+      const data = await res.json();
+      if (data.join_url) {
+        setNewMeeting(data.join_url);
+        notify("🎥 Test meeting created!");
+      } else throw new Error(data.message || "Failed");
+    } catch (e) { notify(`❌ ${e.message}`); }
+    setCreating(false);
+  };
+
+  const zoomContacts = contacts.filter(c => c.zoomMeetingUrl || c.zoomStatus);
+
+  return (
+    <div>
+      <InfoBox color="#2D8CFF" title="What Zoom does in ClearCRM" items={[
+        "Auto-creates a Zoom meeting the moment a Calendly booking comes in",
+        "Zoom link auto-sent to contact via WhatsApp with date/time",
+        "Each agent uses their own Zoom account — meetings assigned correctly",
+        "Contact card shows live meeting status: Scheduled → Started → Ended",
+        "Agents can create an instant Zoom link from any contact card in one click",
+      ]} />
+
+      {/* Credentials */}
+      <div style={{ marginTop:20, marginBottom:6, fontSize:13, fontWeight:700, color:"#475569" }}>Zoom Server-to-Server OAuth App</div>
+      <div style={{ fontSize:13, color:"#64748b", marginBottom:12 }}>
+        Create at <strong>marketplace.zoom.us</strong> → Develop → Build App → Server-to-Server OAuth. Scopes needed: <code>meeting:write:admin</code>, <code>user:read:admin</code>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:16 }}>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Account ID</label>
+          <input value={accountId} onChange={e=>setAccountId(e.target.value)} placeholder="abc123XYZ" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+        </div>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Client ID</label>
+          <input value={clientId} onChange={e=>setClientId(e.target.value)} placeholder="aBcDeFgHiJ" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+        </div>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Client Secret</label>
+          <input type="password" value={clientSecret} onChange={e=>setClientSecret(e.target.value)} placeholder="••••••••••••••••" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+        </div>
+      </div>
+
+      {/* Agent email mapping */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:"#475569", marginBottom:6 }}>Agent Zoom Email Addresses</div>
+        <div style={{ fontSize:13, color:"#64748b", marginBottom:10 }}>
+          Map each agent to their Zoom account email so meetings are created under the right host.
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:10 }}>
+          {users.filter(u=>u.active!==false).map(u => (
+            <div key={u.id} style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ width:32,height:32,borderRadius:8,background:"#ede9fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0 }}>
+                {u.name[0]}
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12,color:"#64748b",marginBottom:3 }}>{u.name}</div>
+                <input value={agentEmails[u.name]||""} onChange={e=>setAgentEmails(m=>({...m,[u.name]:e.target.value}))}
+                  placeholder={`${u.name.toLowerCase()}@company.com`} style={{ width:"100%",fontSize:13 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display:"flex", gap:10, marginBottom:16, flexWrap:"wrap" }}>
+        <button className="btn btn-primary" onClick={()=>save({ clientId, clientSecret, accountId, agentEmails })}>Save</button>
+        <button className="btn btn-ghost" onClick={testConnection} disabled={!clientId||!clientSecret||!accountId||testing}>
+          {testing ? "Testing…" : "Test Connection"}
+        </button>
+        <button className="btn btn-ghost" onClick={createTestMeeting} disabled={!clientId||!clientSecret||!accountId||creating}
+          style={{ background:"#2D8CFF11", color:"#2D8CFF", border:"1px solid #2D8CFF44" }}>
+          {creating ? "Creating…" : "🎥 Create Test Meeting"}
+        </button>
+      </div>
+
+      {testResult && (
+        <div style={{ padding:"10px 14px",borderRadius:8,background:testResult.startsWith("✅")?"#f0fdf4":"#fef2f2",fontSize:13,color:testResult.startsWith("✅")?"#16a34a":"#dc2626",marginBottom:16 }}>
+          {testResult}
+        </div>
+      )}
+
+      {newMeeting && (
+        <div style={{ padding:"12px 16px",borderRadius:8,background:"#eff6ff",border:"1px solid #bfdbfe",fontSize:13,marginBottom:16,display:"flex",alignItems:"center",gap:10 }}>
+          <span>🎥</span>
+          <span style={{ flex:1,color:"#1e40af" }}>Test meeting created: <a href={newMeeting} target="_blank" rel="noreferrer" style={{ color:"#2D8CFF" }}>{newMeeting}</a></span>
+          <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>{navigator.clipboard.writeText(newMeeting);notify("📋 Copied!");}}>Copy</button>
+        </div>
+      )}
+
+      {/* Active Zoom meetings on contacts */}
+      {zoomContacts.length > 0 && (
+        <div style={{ marginBottom:20 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:"#475569", marginBottom:10 }}>Contacts with Zoom meetings</div>
+          {zoomContacts.map(c => {
+            const STATUS = {
+              scheduled: { label:"Scheduled", color:"#2D8CFF", bg:"#eff6ff", icon:"📅" },
+              started:   { label:"Live Now",   color:"#10b981", bg:"#f0fdf4", icon:"🟢" },
+              ended:     { label:"Ended",      color:"#94a3b8", bg:"#f8fafc", icon:"✅" },
+            };
+            const s = STATUS[c.zoomStatus] || STATUS.scheduled;
+            return (
+              <div key={c.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#f8fafc",borderRadius:8,marginBottom:8 }}>
+                <div style={{ flex:1 }}>
+                  <span style={{ fontWeight:600,fontSize:14 }}>{c.name}</span>
+                  <span style={{ color:"#94a3b8",fontSize:13,marginLeft:8 }}>{c.assignedTo}</span>
+                </div>
+                <span style={{ padding:"4px 10px",borderRadius:6,background:s.bg,color:s.color,fontSize:12,fontWeight:600 }}>{s.icon} {s.label}</span>
+                {c.zoomMeetingUrl && (
+                  <a href={c.zoomMeetingUrl} target="_blank" rel="noreferrer"
+                    style={{ padding:"5px 10px",borderRadius:6,background:"#2D8CFF",color:"#fff",fontSize:12,fontWeight:600,textDecoration:"none" }}>
+                    Join 🎥
+                  </a>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <SetupStep step="1" title="Create Server-to-Server OAuth App" description="marketplace.zoom.us → Develop → Build App → Server-to-Server OAuth. Add scopes: meeting:write:admin and user:read:admin. Activate the app." />
+      <SetupStep step="2" title="Add credentials above" description="Copy Account ID, Client ID and Client Secret from your Zoom app into the fields above. Add each agent's Zoom email." />
+      <SetupStep step="3" title="Test the connection" description='Click "Test Connection" — you should see ✅ Connected. Then click "Create Test Meeting" to verify meeting creation works.' />
+      <SetupStep step="4" title="Wire to Calendly webhook" description="The Supabase Edge Function for Calendly already calls Zoom automatically when a booking comes in — no extra setup needed once credentials are saved." />
+    </div>
+  );
+}
+
+// Zoom Server-to-Server OAuth token fetch
+async function getZoomToken(accountId, clientId, clientSecret) {
+  const creds = btoa(`${clientId}:${clientSecret}`);
+  const res = await fetch(`https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${accountId}`, {
+    method: "POST",
+    headers: { "Authorization": `Basic ${creds}`, "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error(data.reason || "Token fetch failed");
+  return data.access_token;
+}
+
+// Create a Zoom meeting for a specific agent (by email)
+async function createZoomMeeting({ accountId, clientId, clientSecret, agentEmail, topic, startTime, duration = 60 }) {
+  const token = await getZoomToken(accountId, clientId, clientSecret);
+  const userId = agentEmail || "me";
+  const res = await fetch(`https://api.zoom.us/v2/users/${encodeURIComponent(userId)}/meetings`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      topic,
+      type: startTime ? 2 : 1,          // 2=scheduled, 1=instant
+      start_time: startTime || undefined,
+      duration,
+      timezone: "Europe/Dublin",
+      settings: {
+        join_before_host: true,
+        waiting_room: false,
+        auto_recording: "none",
+        mute_upon_entry: false,
+      },
+    }),
+  });
+  const data = await res.json();
+  if (!data.join_url) throw new Error(data.message || "Failed to create meeting");
+  return { joinUrl: data.join_url, meetingId: data.id, startUrl: data.start_url };
+}
+
 function SumsubTab({ config, save, notify, contacts, setContacts }) {
   const [appToken, setAppToken] = useState(config.appToken || "");
   const [secretKey, setSecretKey] = useState(config.secretKey || "");
@@ -3969,7 +4201,8 @@ function StatusTab({ config }) {
   const checks = [
     { key:"supabase",  label:"Supabase Database", icon:"🗄️",  connected: !!(config.supabase?.url && config.supabase?.anon && config.supabase?.connected) },
     { key:"calendly",  label:"Calendly",          icon:"📅",  connected: !!(config.calendly?.apiKey) },
-    { key:"sumsub",    label:"Sumsub KYC",         icon:"🔍",  connected: !!(config.sumsub?.appToken && config.sumsub?.secretKey) },
+    { key:"zoom",      label:"Zoom",              icon:"🎥",  connected: !!(config.zoom?.clientId && config.zoom?.clientSecret) },
+    { key:"sumsub",    label:"Sumsub KYC",        icon:"🔍",  connected: !!(config.sumsub?.appToken && config.sumsub?.secretKey) },
     { key:"cloudtalk", label:"Cloudtalk Calls",   icon:"📞",  connected: !!(config.cloudtalk?.apiKey) },
   ];
 
@@ -4009,9 +4242,10 @@ function StatusTab({ config }) {
       <div style={{ background:"#f8fafc",borderRadius:10,padding:"18px 20px",border:"1px solid #e2e8f0" }}>
         <div style={{ fontSize:13,fontWeight:700,color:"#475569",marginBottom:14 }}>AUTOMATED DATA FLOW</div>
         {[
-          ["📅","Contact books via Calendly","→","📋","Lead created/updated in ClearCRM","→","💬","WhatsApp confirmation sent"],
+          ["📅","Contact books via Calendly","→","🎥","Zoom meeting auto-created","→","💬","WhatsApp confirmation + link sent"],
           ["📞","Cloudtalk call ends","→","📋","Call logged + status updated","→","🔄","Pipeline moves automatically"],
           ["🔍","Sumsub review complete","→","📋","KYC badge updated on contact","→","✅","Agent sees status instantly"],
+          ["🎥","Zoom meeting starts/ends","→","📋","Contact status updated live","→","👥","All agents notified"],
           ["📋","Any data change in ClearCRM","→","🗄️","Saved to Supabase","→","👥","All agents see it live"],
         ].map(([i1,s1,arr,i2,s2,arr2,i3,s3],idx)=>(
           <div key={idx} style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #e2e8f0",flexWrap:"wrap",fontSize:13 }}>
@@ -4027,6 +4261,71 @@ function StatusTab({ config }) {
         ))}
       </div>
     </div>
+  );
+}
+
+// ─── ZOOM INSTANT MEETING BUTTON ─────────────────────────────────────────────
+// Appears on contact card — creates a Zoom meeting in one click
+function ZoomInstantButton({ contact, updateContact, notify }) {
+  const [creating, setCreating] = useState(false);
+
+  const zoomConfig = (() => {
+    try { return JSON.parse(localStorage.getItem("clearcrm_integrations") || "{}").zoom || {}; } catch { return {}; }
+  })();
+
+  if (!zoomConfig.clientId || !zoomConfig.clientSecret || !zoomConfig.accountId) return null;
+
+  const agentEmail = zoomConfig.agentEmails?.[contact.assignedTo] || "";
+
+  const createMeeting = async () => {
+    setCreating(true);
+    try {
+      const result = await createZoomMeeting({
+        accountId:    zoomConfig.accountId,
+        clientId:     zoomConfig.clientId,
+        clientSecret: zoomConfig.clientSecret,
+        agentEmail,
+        topic:        `Call with ${contact.name}`,
+        startTime:    contact.callDate && contact.callTime
+          ? `${contact.callDate}T${contact.callTime}:00`
+          : null,
+        duration: 60,
+      });
+      updateContact(contact.id, {
+        meetingLink:  result.joinUrl,
+        zoomMeetingId: String(result.meetingId),
+        zoomStatus:   "scheduled",
+      });
+      // Also save to Supabase
+      if (typeof sbFetch !== "undefined") {
+        sbFetch(`/contacts?id=eq.${contact.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ meeting_link: result.joinUrl, zoom_meeting_id: String(result.meetingId), zoom_status: "scheduled" }),
+        }).catch(() => {});
+      }
+      notify(`🎥 Zoom meeting created for ${contact.name}!`);
+    } catch (e) {
+      notify(`❌ Zoom: ${e.message}`);
+    }
+    setCreating(false);
+  };
+
+  if (contact.meetingLink?.includes("zoom.us")) {
+    return (
+      <div style={{ fontSize:12,color:"#64748b",marginTop:5,display:"flex",alignItems:"center",gap:6 }}>
+        ✅ Zoom meeting set
+        <button onClick={createMeeting} disabled={creating} style={{ fontSize:11,padding:"2px 8px",borderRadius:4,border:"1px solid #cbd5e1",background:"transparent",cursor:"pointer",color:"#64748b" }}>
+          {creating?"…":"↻ New"}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={createMeeting} disabled={creating}
+      style={{ marginTop:8,padding:"7px 14px",borderRadius:8,background:"#2D8CFF",color:"#fff",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,opacity:creating?0.6:1 }}>
+      {creating ? "⏳ Creating Zoom…" : "🎥 Create Zoom Meeting"}
+    </button>
   );
 }
 
