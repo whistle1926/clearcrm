@@ -1,74 +1,88 @@
 import { useState, useEffect, useRef } from "react";
 
-// ─── ROLE DEFINITIONS ──────────────────────────────────────────────────────────
-const ROLE_PRESETS = {
+// ─── ROLE DEFINITIONS (defaults — overridden by localStorage) ─────────────────
+const DEFAULT_ROLES = {
   admin: {
-    label: "Super Admin", color: "#6366f1", icon: "👑",
+    label: "Super Admin", color: "#6366f1", icon: "👑", isSystem: true,
     tabs: ["dashboard","contacts","pipeline","whatsapp","team","settings"],
     canViewAllLeads: true, canReassign: true, canDeleteContacts: true,
     canExport: true, canManageUsers: true, canViewAnalytics: true,
   },
   manager: {
-    label: "Team Manager", color: "#3b82f6", icon: "🏆",
+    label: "Team Manager", color: "#3b82f6", icon: "🏆", isSystem: false,
     tabs: ["dashboard","contacts","pipeline","whatsapp","team"],
     canViewAllLeads: true, canReassign: true, canDeleteContacts: false,
     canExport: true, canManageUsers: false, canViewAnalytics: true,
   },
   agent: {
-    label: "Sales Agent", color: "#10b981", icon: "💼",
+    label: "Sales Agent", color: "#10b981", icon: "💼", isSystem: false,
     tabs: ["dashboard","contacts","pipeline","whatsapp"],
     canViewAllLeads: false, canReassign: false, canDeleteContacts: false,
     canExport: false, canManageUsers: false, canViewAnalytics: false,
   },
   kyc: {
-    label: "KYC Officer", color: "#f59e0b", icon: "🔍",
+    label: "KYC Officer", color: "#f59e0b", icon: "🔍", isSystem: false,
     tabs: ["contacts"],
     canViewAllLeads: true, canReassign: false, canDeleteContacts: false,
     canExport: true, canManageUsers: false, canViewAnalytics: false,
   },
   onboarding: {
-    label: "Onboarding", color: "#8b5cf6", icon: "🎓",
+    label: "Onboarding", color: "#8b5cf6", icon: "🎓", isSystem: false,
     tabs: ["dashboard","contacts","whatsapp"],
     canViewAllLeads: true, canReassign: false, canDeleteContacts: false,
     canExport: false, canManageUsers: false, canViewAnalytics: false,
   },
   readonly: {
-    label: "Read Only", color: "#94a3b8", icon: "👁️",
+    label: "Read Only", color: "#94a3b8", icon: "👁️", isSystem: false,
     tabs: ["dashboard","contacts","pipeline"],
     canViewAllLeads: true, canReassign: false, canDeleteContacts: false,
     canExport: false, canManageUsers: false, canViewAnalytics: true,
   },
 };
 
+// Used only as a fallback before App mounts — real roles come from state
+let ROLE_PRESETS = DEFAULT_ROLES;
+
 const ALL_TABS = [
-  { id:"dashboard", label:"Dashboard", icon:"📊" },
-  { id:"contacts",  label:"Contacts",  icon:"👥" },
-  { id:"pipeline",  label:"Pipeline",  icon:"🔄" },
-  { id:"whatsapp",  label:"WhatsApp",  icon:"💬" },
-  { id:"team",      label:"Team & Agents", icon:"👤" },
-  { id:"settings",  label:"Settings",  icon:"⚙️" },
+  { id:"dashboard", label:"Dashboard",    icon:"📊" },
+  { id:"contacts",  label:"Contacts",     icon:"👥" },
+  { id:"pipeline",  label:"Pipeline",     icon:"🔄" },
+  { id:"whatsapp",  label:"WhatsApp",     icon:"💬" },
+  { id:"team",      label:"Team & Agents",icon:"👤" },
+  { id:"settings",  label:"Settings",     icon:"⚙️" },
 ];
+
+const PERM_LABELS = {
+  canViewAllLeads:   { label:"View All Leads",    desc:"See every contact, not just own" },
+  canReassign:       { label:"Reassign Leads",    desc:"Move leads between agents" },
+  canDeleteContacts: { label:"Delete Contacts",   desc:"Permanently remove contacts" },
+  canExport:         { label:"Export Data",        desc:"Download CSV exports" },
+  canManageUsers:    { label:"Manage Users",       desc:"Add/edit team members" },
+  canViewAnalytics:  { label:"View Analytics",    desc:"Access Team & Agents page" },
+};
+
+const ICON_OPTIONS = ["👑","🏆","💼","🔍","🎓","👁️","⚡","🎯","📋","🔐","💰","📞","🤝","🛡️","🌟","🔑","📊","🏢","✅","🚀"];
+const COLOR_OPTIONS = ["#6366f1","#3b82f6","#10b981","#f59e0b","#8b5cf6","#ef4444","#f97316","#ec4899","#14b8a6","#64748b","#0ea5e9","#84cc16"];
 
 const DEFAULT_USERS = [
-  { id:1, name:"Alex",   pin:"0000", role:"admin",  department:"Management", jobTitle:"Director", email:"alex@company.com",   avatar:"", active:true,  customTabs:null, customPerms:null },
-  { id:2, name:"Jamie",  pin:"1111", role:"agent",  department:"Sales",      jobTitle:"Senior Agent", email:"jamie@company.com", avatar:"", active:true, customTabs:null, customPerms:null },
-  { id:3, name:"Sam",    pin:"2222", role:"agent",  department:"Sales",      jobTitle:"Sales Agent",  email:"sam@company.com",   avatar:"", active:true, customTabs:null, customPerms:null },
-  { id:4, name:"Jordan", pin:"3333", role:"agent",  department:"Sales",      jobTitle:"Sales Agent",  email:"jordan@company.com",avatar:"", active:true, customTabs:null, customPerms:null },
+  { id:1, name:"Alex",   pin:"0000", role:"admin",  department:"Management", jobTitle:"Director",     email:"alex@company.com",   avatar:"", active:true, customTabs:null, customPerms:null },
+  { id:2, name:"Jamie",  pin:"1111", role:"agent",  department:"Sales",      jobTitle:"Senior Agent", email:"jamie@company.com",  avatar:"", active:true, customTabs:null, customPerms:null },
+  { id:3, name:"Sam",    pin:"2222", role:"agent",  department:"Sales",      jobTitle:"Sales Agent",  email:"sam@company.com",    avatar:"", active:true, customTabs:null, customPerms:null },
+  { id:4, name:"Jordan", pin:"3333", role:"agent",  department:"Sales",      jobTitle:"Sales Agent",  email:"jordan@company.com", avatar:"", active:true, customTabs:null, customPerms:null },
 ];
 
-// Helper: get effective tabs & perms for a user
-function getUserPerms(user) {
-  const preset = ROLE_PRESETS[user.role] || ROLE_PRESETS.agent;
+function getUserPerms(user, roles) {
+  const roleMap = roles || ROLE_PRESETS;
+  const preset = roleMap[user.role] || roleMap.agent || Object.values(roleMap)[0];
   return {
-    tabs:  user.customTabs  ?? preset.tabs,
     ...preset,
+    tabs:  user.customTabs  ?? preset.tabs,
     ...(user.customPerms ?? {}),
   };
 }
 
-// ─── STATIC USERS fallback (for login screen) ─────────────────────────────────
-// Actual users are loaded from localStorage in App component
 const USERS = DEFAULT_USERS;
+
 
 
 // ─── SAMPLE DATA ───────────────────────────────────────────────────────────────
@@ -141,6 +155,16 @@ const BASE_STYLES = `
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
 
+  const [roles, setRoles] = useState(() => {
+    try {
+      const saved = localStorage.getItem("clearcrm_roles");
+      return saved ? JSON.parse(saved) : DEFAULT_ROLES;
+    } catch { return DEFAULT_ROLES; }
+  });
+
+  // Keep global ROLE_PRESETS in sync with state
+  useEffect(() => { ROLE_PRESETS = roles; }, [roles]);
+
   const [users, setUsers] = useState(() => {
     try {
       const saved = localStorage.getItem("clearcrm_users");
@@ -172,12 +196,12 @@ export default function App() {
     try { return localStorage.getItem("clearcrm_claudekey") || ""; } catch { return ""; }
   });
 
+  useEffect(() => { try { localStorage.setItem("clearcrm_roles", JSON.stringify(roles)); } catch {} }, [roles]);
   useEffect(() => { try { localStorage.setItem("clearcrm_users", JSON.stringify(users)); } catch {} }, [users]);
   useEffect(() => { try { localStorage.setItem("clearcrm_contacts", JSON.stringify(contacts)); } catch {} }, [contacts]);
   useEffect(() => { try { localStorage.setItem("clearcrm_waconfig", JSON.stringify(waConfig)); } catch {} }, [waConfig]);
   useEffect(() => { try { localStorage.setItem("clearcrm_claudekey", claudeApiKey); } catch {} }, [claudeApiKey]);
 
-  // Keep currentUser in sync if users array changes
   useEffect(() => {
     if (currentUser) {
       const updated = users.find(u => u.id === currentUser.id);
@@ -190,18 +214,18 @@ export default function App() {
     setCurrentUser(fresh);
   };
 
-  if (!currentUser) return <LoginScreen users={users} onLogin={handleLogin} />;
+  if (!currentUser) return <LoginScreen users={users} roles={roles} onLogin={handleLogin} />;
 
-  const perms = getUserPerms(currentUser);
+  const perms = getUserPerms(currentUser, roles);
   const isAdmin = currentUser.role === "admin";
 
   return isAdmin
-    ? <AdminApp user={currentUser} users={users} setUsers={setUsers} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} claudeApiKey={claudeApiKey} setClaudeApiKey={setClaudeApiKey} />
-    : <AgentApp user={currentUser} perms={perms} users={users} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} claudeApiKey={claudeApiKey} />;
+    ? <AdminApp user={currentUser} roles={roles} setRoles={setRoles} users={users} setUsers={setUsers} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} claudeApiKey={claudeApiKey} setClaudeApiKey={setClaudeApiKey} />
+    : <AgentApp user={currentUser} perms={perms} users={users} roles={roles} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} claudeApiKey={claudeApiKey} />;
 }
 
 // ─── USER MANAGEMENT PANEL ────────────────────────────────────────────────────
-function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig }) {
+function UserManagementPanel({ users, setUsers, roles, notify, waConfig, setWaConfig }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [showAdd, setShowAdd] = useState(false);
@@ -210,7 +234,7 @@ function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig })
 
   const startEdit = (u) => {
     setEditingId(u.id);
-    setEditForm({ ...u, customTabs: u.customTabs ?? ROLE_PRESETS[u.role]?.tabs ?? [] });
+    setEditForm({ ...u, customTabs: u.customTabs ?? roles[u.role]?.tabs ?? [] });
     setExpandedId(u.id);
   };
 
@@ -252,7 +276,7 @@ function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig })
 
       {/* Role legend */}
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:20 }}>
-        {Object.entries(ROLE_PRESETS).map(([key,r])=>(
+        {Object.entries(roles).map(([key,r])=>(
           <span key={key} className="pill" style={{ background:`${r.color}18`, color:r.color, fontSize:12 }}>{r.icon} {r.label}</span>
         ))}
       </div>
@@ -260,7 +284,7 @@ function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig })
       {/* User rows */}
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
         {users.map(u => {
-          const preset = ROLE_PRESETS[u.role] || ROLE_PRESETS.agent;
+          const preset = roles[u.role] || roles.agent || Object.values(roles)[0];
           const isEditing = editingId === u.id;
           const effectiveTabs = u.customTabs ?? preset.tabs;
 
@@ -304,8 +328,8 @@ function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig })
                     ))}
                     <div>
                       <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:5 }}>Role</label>
-                      <select value={editForm.role||"agent"} onChange={e=>{ setF("role",e.target.value); setF("customTabs", ROLE_PRESETS[e.target.value]?.tabs ?? []); }} style={{ width:"100%" }}>
-                        {Object.entries(ROLE_PRESETS).map(([k,r])=><option key={k} value={k}>{r.icon} {r.label}</option>)}
+                      <select value={editForm.role||"agent"} onChange={e=>{ setF("role",e.target.value); setF("customTabs", roles[e.target.value]?.tabs ?? []); }} style={{ width:"100%" }}>
+                        {Object.entries(roles).map(([k,r])=><option key={k} value={k}>{r.icon} {r.label}</option>)}
                       </select>
                     </div>
                   </div>
@@ -324,7 +348,7 @@ function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig })
                         );
                       })}
                     </div>
-                    <div style={{ marginTop:6, fontSize:12, color:"#94a3b8" }}>Default for {ROLE_PRESETS[editForm.role]?.label}: {(ROLE_PRESETS[editForm.role]?.tabs||[]).map(t=>ALL_TABS.find(x=>x.id===t)?.label).join(", ")}</div>
+                    <div style={{ marginTop:6, fontSize:12, color:"#94a3b8" }}>Default for {roles[editForm.role]?.label}: {(roles[editForm.role]?.tabs||[]).map(t=>ALL_TABS.find(x=>x.id===t)?.label).join(", ")}</div>
                   </div>
 
                   <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -356,13 +380,15 @@ function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig })
               <div>
                 <label style={{ fontSize:13, color:"#64748b", display:"block", marginBottom:5 }}>Role *</label>
                 <select value={newUser.role} onChange={e=>setNewUser(f=>({...f,role:e.target.value}))} style={{ width:"100%" }}>
-                  {Object.entries(ROLE_PRESETS).map(([k,r])=><option key={k} value={k}>{r.icon} {r.label}</option>)}
+                  {Object.entries(roles).map(([k,r])=><option key={k} value={k}>{r.icon} {r.label}</option>)}
                 </select>
               </div>
             </div>
-            <div style={{ padding:"12px 16px", background:"#ede9fe", borderRadius:8, fontSize:13, color:"#5b21b6", marginBottom:16 }}>
-              {(() => { const r = ROLE_PRESETS[newUser.role]; return `${r.icon} ${r.label} — will see: ${r.tabs.map(t=>ALL_TABS.find(x=>x.id===t)?.label).join(", ")}`; })()}
-            </div>
+            {roles[newUser.role] && (
+              <div style={{ padding:"12px 16px", background:"#ede9fe", borderRadius:8, fontSize:13, color:"#5b21b6", marginBottom:16 }}>
+                {roles[newUser.role].icon} {roles[newUser.role].label} — will see: {(roles[newUser.role].tabs||[]).map(t=>ALL_TABS.find(x=>x.id===t)?.label).join(", ")}
+              </div>
+            )}
             <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
               <button className="btn btn-ghost" onClick={()=>setShowAdd(false)}>Cancel</button>
               <button className="btn btn-primary" style={{ opacity:newUser.name&&newUser.pin.length===4?1:0.5 }} onClick={addUser}>Add Member</button>
@@ -374,13 +400,307 @@ function UserManagementPanel({ users, setUsers, notify, waConfig, setWaConfig })
   );
 }
 
+// ─── ROLE BUILDER PANEL ───────────────────────────────────────────────────────
+function RoleBuilderPanel({ roles, setRoles, users, notify }) {
+  const blankRole = () => ({
+    label:"", icon:"💼", color:"#6366f1", isSystem:false,
+    tabs:["dashboard","contacts"],
+    canViewAllLeads:false, canReassign:false, canDeleteContacts:false,
+    canExport:false, canManageUsers:false, canViewAnalytics:false,
+  });
+
+  const [editingKey, setEditingKey] = useState(null); // null=closed, "NEW"=new, else key
+  const [form, setForm] = useState(blankRole());
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const setF = (k,v) => setForm(f=>({...f,[k]:v}));
+  const toggleFormTab = (t) => setF("tabs", form.tabs.includes(t)?form.tabs.filter(x=>x!==t):[...form.tabs,t]);
+  const togglePerm = (k) => setF(k, !form[k]);
+
+  const openNew = () => { setForm(blankRole()); setEditingKey("NEW"); };
+  const openEdit = (key) => { setForm({...roles[key]}); setEditingKey(key); };
+
+  const save = () => {
+    if (!form.label.trim()) { notify("❌ Role name is required"); return; }
+    const key = editingKey === "NEW"
+      ? "role_" + Date.now()
+      : editingKey;
+    setRoles(prev => ({ ...prev, [key]: { ...form } }));
+    setEditingKey(null);
+    notify(editingKey==="NEW" ? `✅ Role "${form.label}" created` : `✅ Role "${form.label}" updated`);
+  };
+
+  const deleteRole = (key) => {
+    const inUse = users.filter(u=>u.role===key);
+    if (inUse.length>0) { notify(`❌ Can't delete — ${inUse.map(u=>u.name).join(", ")} use this role`); setConfirmDelete(null); return; }
+    setRoles(prev => { const next={...prev}; delete next[key]; return next; });
+    setConfirmDelete(null);
+    notify("🗑️ Role deleted");
+  };
+
+  return (
+    <div className="card" style={{ padding:24, marginBottom:20 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ width:36, height:36, background:"#f59e0b22", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🎨</div>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700 }}>Role Builder</div>
+            <div style={{ fontSize:13, color:"#64748b" }}>Create and customise roles with their own name, icon, colour and permissions</div>
+          </div>
+        </div>
+        <button className="btn btn-primary" onClick={openNew}>+ Create Role</button>
+      </div>
+
+      {/* Role cards grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
+        {Object.entries(roles).map(([key, r]) => {
+          const memberCount = users.filter(u=>u.role===key).length;
+          const isEditing = editingKey === key;
+          return (
+            <div key={key} style={{ border:`2px solid ${isEditing?r.color:"#e2e8f0"}`, borderRadius:12, overflow:"hidden", transition:"border-color 0.2s" }}>
+              {/* Card header */}
+              <div style={{ padding:"16px 18px", background:`${r.color}08`, borderBottom:"1px solid #f1f5f9", display:"flex", alignItems:"center", gap:12 }}>
+                <div style={{ width:44,height:44,borderRadius:12,background:`${r.color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0 }}>{r.icon}</div>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontSize:15, fontWeight:700, display:"flex", alignItems:"center", gap:6 }}>
+                    <span style={{ color:r.color }}>{r.label}</span>
+                    {r.isSystem && <span className="pill" style={{ background:"#e0e7ff",color:"#4338ca",fontSize:10 }}>system</span>}
+                  </div>
+                  <div style={{ fontSize:12, color:"#94a3b8", marginTop:2 }}>{memberCount} member{memberCount!==1?"s":""}</div>
+                </div>
+                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                  <button className="btn btn-ghost" style={{ fontSize:12, padding:"5px 10px" }} onClick={()=>isEditing?setEditingKey(null):openEdit(key)}>
+                    {isEditing?"✕":"✏️"}
+                  </button>
+                  {!r.isSystem && (
+                    <button className="btn btn-ghost" style={{ fontSize:12, padding:"5px 10px", color:"#ef4444" }} onClick={()=>setConfirmDelete(key)}>🗑️</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Card body — tabs + perms summary */}
+              {!isEditing && (
+                <div style={{ padding:"12px 18px" }}>
+                  <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>
+                    <span style={{ fontWeight:600 }}>Tabs: </span>
+                    {(r.tabs||[]).map(t=>ALL_TABS.find(x=>x.id===t)?.icon||"").join(" ")||"None"}
+                  </div>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    {Object.entries(PERM_LABELS).filter(([k])=>r[k]).map(([k,p])=>(
+                      <span key={k} className="pill" style={{ background:"#dcfce7",color:"#16a34a",fontSize:11 }}>✓ {p.label}</span>
+                    ))}
+                    {Object.entries(PERM_LABELS).filter(([k])=>!r[k]).map(([k,p])=>(
+                      <span key={k} className="pill" style={{ background:"#f1f5f9",color:"#94a3b8",fontSize:11 }}>✗ {p.label}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Inline edit form */}
+              {isEditing && (
+                <div style={{ padding:"18px 18px", background:"#fafaf9" }}>
+                  {/* Name + icon + colour row */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto", gap:10, marginBottom:14, alignItems:"end" }}>
+                    <div>
+                      <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Role Name *</label>
+                      <input value={form.label} onChange={e=>setF("label",e.target.value)} placeholder="e.g. Investment Advisor" style={{ width:"100%" }} />
+                    </div>
+                    <div style={{ position:"relative" }}>
+                      <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Icon</label>
+                      <button onClick={()=>{setShowIconPicker(p=>!p);setShowColorPicker(false);}} style={{ width:48,height:38,borderRadius:8,border:"2px solid #e2e8f0",background:"#fff",fontSize:20,cursor:"pointer" }}>{form.icon}</button>
+                      {showIconPicker && (
+                        <div style={{ position:"absolute",top:46,left:0,zIndex:200,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:10,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:4,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",width:160 }}>
+                          {ICON_OPTIONS.map(ic=>(
+                            <button key={ic} onClick={()=>{setF("icon",ic);setShowIconPicker(false);}} style={{ width:28,height:28,border:"none",background:form.icon===ic?"#ede9fe":"transparent",borderRadius:6,fontSize:16,cursor:"pointer" }}>{ic}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ position:"relative" }}>
+                      <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Colour</label>
+                      <button onClick={()=>{setShowColorPicker(p=>!p);setShowIconPicker(false);}} style={{ width:48,height:38,borderRadius:8,border:"2px solid #e2e8f0",background:form.color,cursor:"pointer" }} />
+                      {showColorPicker && (
+                        <div style={{ position:"absolute",top:46,right:0,zIndex:200,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:10,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",width:160 }}>
+                          {COLOR_OPTIONS.map(c=>(
+                            <button key={c} onClick={()=>{setF("color",c);setShowColorPicker(false);}} style={{ width:28,height:28,borderRadius:6,background:c,border:form.color===c?"3px solid #1e293b":"2px solid transparent",cursor:"pointer" }} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tabs */}
+                  <div style={{ marginBottom:14 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color:"#475569", marginBottom:8 }}>🗂️ Pages this role can access</div>
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                      {ALL_TABS.map(tab => {
+                        const on = form.tabs.includes(tab.id);
+                        return (
+                          <button key={tab.id} onClick={()=>toggleFormTab(tab.id)}
+                            style={{ padding:"6px 12px",borderRadius:8,border:`2px solid ${on?form.color:"#e2e8f0"}`,background:on?`${form.color}18`:"#f8fafc",color:on?form.color:"#64748b",fontSize:12,fontWeight:on?700:400,cursor:"pointer" }}>
+                            {tab.icon} {tab.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Permissions */}
+                  <div style={{ marginBottom:16 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color:"#475569", marginBottom:8 }}>🔐 Permissions</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                      {Object.entries(PERM_LABELS).map(([k,p])=>{
+                        const on = form[k];
+                        return (
+                          <button key={k} onClick={()=>togglePerm(k)}
+                            style={{ padding:"8px 10px",borderRadius:8,border:`1px solid ${on?"#10b981":"#e2e8f0"}`,background:on?"#f0fdf4":"#f8fafc",color:on?"#16a34a":"#64748b",fontSize:12,fontWeight:on?600:400,cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:6 }}>
+                            <span style={{ fontSize:14 }}>{on?"✅":"⬜"}</span>
+                            <div>
+                              <div style={{ fontSize:12,fontWeight:600 }}>{p.label}</div>
+                              <div style={{ fontSize:11,color:"#94a3b8" }}>{p.desc}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Preview */}
+                  <div style={{ padding:"10px 14px",background:`${form.color}12`,border:`1px solid ${form.color}44`,borderRadius:8,marginBottom:14,display:"flex",alignItems:"center",gap:10 }}>
+                    <span style={{ fontSize:20 }}>{form.icon}</span>
+                    <div>
+                      <div style={{ fontSize:13,fontWeight:700,color:form.color }}>{form.label||"Unnamed Role"}</div>
+                      <div style={{ fontSize:12,color:"#64748b" }}>Sees: {form.tabs.map(t=>ALL_TABS.find(x=>x.id===t)?.label).join(", ")||"nothing"}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display:"flex",gap:8,justifyContent:"flex-end" }}>
+                    <button className="btn btn-ghost" onClick={()=>setEditingKey(null)}>Cancel</button>
+                    <button className="btn btn-primary" style={{ background:form.color,borderColor:form.color }} onClick={save}>Save Role</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* New role placeholder card */}
+        {editingKey === "NEW" && (
+          <div style={{ border:"2px solid #6366f1", borderRadius:12, overflow:"hidden" }}>
+            <div style={{ padding:"16px 18px", background:"#f8f7ff", borderBottom:"1px solid #e2e8f0", display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ width:44,height:44,borderRadius:12,background:`${form.color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22 }}>{form.icon}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:15,fontWeight:700,color:"#6366f1" }}>{form.label||"New Role"}</div>
+                <div style={{ fontSize:12,color:"#94a3b8" }}>Draft</div>
+              </div>
+              <button className="btn btn-ghost" style={{ fontSize:12,padding:"5px 10px" }} onClick={()=>setEditingKey(null)}>✕</button>
+            </div>
+            <div style={{ padding:"18px 18px", background:"#fafaf9" }}>
+              {/* Reuse same form fields */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr auto auto", gap:10, marginBottom:14, alignItems:"end" }}>
+                <div>
+                  <label style={{ fontSize:12,color:"#64748b",display:"block",marginBottom:4 }}>Role Name *</label>
+                  <input value={form.label} onChange={e=>setF("label",e.target.value)} placeholder="e.g. Investment Advisor" style={{ width:"100%" }} autoFocus />
+                </div>
+                <div style={{ position:"relative" }}>
+                  <label style={{ fontSize:12,color:"#64748b",display:"block",marginBottom:4 }}>Icon</label>
+                  <button onClick={()=>{setShowIconPicker(p=>!p);setShowColorPicker(false);}} style={{ width:48,height:38,borderRadius:8,border:"2px solid #e2e8f0",background:"#fff",fontSize:20,cursor:"pointer" }}>{form.icon}</button>
+                  {showIconPicker && (
+                    <div style={{ position:"absolute",top:46,left:0,zIndex:200,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:10,display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:4,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",width:160 }}>
+                      {ICON_OPTIONS.map(ic=>(
+                        <button key={ic} onClick={()=>{setF("icon",ic);setShowIconPicker(false);}} style={{ width:28,height:28,border:"none",background:form.icon===ic?"#ede9fe":"transparent",borderRadius:6,fontSize:16,cursor:"pointer" }}>{ic}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div style={{ position:"relative" }}>
+                  <label style={{ fontSize:12,color:"#64748b",display:"block",marginBottom:4 }}>Colour</label>
+                  <button onClick={()=>{setShowColorPicker(p=>!p);setShowIconPicker(false);}} style={{ width:48,height:38,borderRadius:8,border:"2px solid #e2e8f0",background:form.color,cursor:"pointer" }} />
+                  {showColorPicker && (
+                    <div style={{ position:"absolute",top:46,right:0,zIndex:200,background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:10,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",width:160 }}>
+                      {COLOR_OPTIONS.map(c=>(
+                        <button key={c} onClick={()=>{setF("color",c);setShowColorPicker(false);}} style={{ width:28,height:28,borderRadius:6,background:c,border:form.color===c?"3px solid #1e293b":"2px solid transparent",cursor:"pointer" }} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:12,fontWeight:600,color:"#475569",marginBottom:8 }}>🗂️ Pages this role can access</div>
+                <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                  {ALL_TABS.map(tab=>{
+                    const on=form.tabs.includes(tab.id);
+                    return (
+                      <button key={tab.id} onClick={()=>toggleFormTab(tab.id)}
+                        style={{ padding:"6px 12px",borderRadius:8,border:`2px solid ${on?form.color:"#e2e8f0"}`,background:on?`${form.color}18`:"#f8fafc",color:on?form.color:"#64748b",fontSize:12,fontWeight:on?700:400,cursor:"pointer" }}>
+                        {tab.icon} {tab.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:12,fontWeight:600,color:"#475569",marginBottom:8 }}>🔐 Permissions</div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6 }}>
+                  {Object.entries(PERM_LABELS).map(([k,p])=>{
+                    const on=form[k];
+                    return (
+                      <button key={k} onClick={()=>togglePerm(k)}
+                        style={{ padding:"8px 10px",borderRadius:8,border:`1px solid ${on?"#10b981":"#e2e8f0"}`,background:on?"#f0fdf4":"#f8fafc",color:on?"#16a34a":"#64748b",fontSize:12,fontWeight:on?600:400,cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:6 }}>
+                        <span style={{ fontSize:14 }}>{on?"✅":"⬜"}</span>
+                        <div><div style={{ fontSize:12,fontWeight:600 }}>{p.label}</div><div style={{ fontSize:11,color:"#94a3b8" }}>{p.desc}</div></div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div style={{ padding:"10px 14px",background:`${form.color}12`,border:`1px solid ${form.color}44`,borderRadius:8,marginBottom:14,display:"flex",alignItems:"center",gap:10 }}>
+                <span style={{ fontSize:20 }}>{form.icon}</span>
+                <div>
+                  <div style={{ fontSize:13,fontWeight:700,color:form.color }}>{form.label||"Unnamed Role"}</div>
+                  <div style={{ fontSize:12,color:"#64748b" }}>Sees: {form.tabs.map(t=>ALL_TABS.find(x=>x.id===t)?.label).join(", ")||"nothing"}</div>
+                </div>
+              </div>
+
+              <div style={{ display:"flex",gap:8,justifyContent:"flex-end" }}>
+                <button className="btn btn-ghost" onClick={()=>setEditingKey(null)}>Cancel</button>
+                <button className="btn btn-primary" style={{ background:form.color,borderColor:form.color }} onClick={save}>Create Role</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Delete confirm */}
+      {confirmDelete && (
+        <div className="overlay" onClick={()=>setConfirmDelete(null)}>
+          <div className="modal" style={{ maxWidth:400 }} onClick={e=>e.stopPropagation()}>
+            <div style={{ fontSize:17,fontWeight:700,marginBottom:10 }}>Delete role "{roles[confirmDelete]?.label}"?</div>
+            <p style={{ color:"#64748b",fontSize:14,marginBottom:20 }}>This can't be undone. Any members with this role will need to be reassigned.</p>
+            <div style={{ display:"flex",gap:10,justifyContent:"flex-end" }}>
+              <button className="btn btn-ghost" onClick={()=>setConfirmDelete(null)}>Cancel</button>
+              <button className="btn" style={{ background:"#ef4444",color:"#fff",border:"none" }} onClick={()=>deleteRole(confirmDelete)}>Delete Role</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── LOGIN ─────────────────────────────────────────────────────────────────────
-function LoginScreen({ users, onLogin }) {
+function LoginScreen({ users, roles, onLogin }) {
   const [pin, setPin] = useState(["", "", "", ""]);
   const [error, setError] = useState("");
   const [shake, setShake] = useState(false);
 
   const activeUsers = users.filter(u => u.active !== false);
+  const roleMap = roles || DEFAULT_ROLES;
 
   const handleChange = (i, val) => {
     if (!/^\d?$/.test(val)) return;
@@ -419,7 +739,7 @@ function LoginScreen({ users, onLogin }) {
         <div style={{ background: "#fff", border: "1px solid #1f2330", borderRadius: 12, padding: 16, textAlign: "left" }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", marginBottom: 10, letterSpacing: 1 }}>TEAM PINS</div>
           {activeUsers.map(u => {
-            const preset = ROLE_PRESETS[u.role] || ROLE_PRESETS.agent;
+            const preset = roleMap[u.role] || roleMap.agent || Object.values(roleMap)[0] || { color:"#6366f1", icon:"👤", label:u.role };
             return (
               <div key={u.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #1a1d26" }}>
                 <div>
@@ -873,7 +1193,7 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
 }
 
 // ─── ADMIN APP ─────────────────────────────────────────────────────────────────
-function AdminApp({ user, users, setUsers, contacts, setContacts, onLogout, waConfig, setWaConfig, claudeApiKey, setClaudeApiKey }) {
+function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContacts, onLogout, waConfig, setWaConfig, claudeApiKey, setClaudeApiKey }) {
   const [view, setView] = useState("dashboard");
   const [checklist, setChecklist] = useState({ fb:false, dev:false, verify:false, numbers:false, token:false, test:false, webhook:false });
   const [selectedContact, setSelectedContact] = useState(null);
@@ -1206,7 +1526,8 @@ function AdminApp({ user, users, setUsers, contacts, setContacts, onLogout, waCo
             <p style={{ color:"#64748b", fontSize:14, marginBottom:24 }}>Manage your team, roles, permissions and API credentials.</p>
 
             {/* ── USER MANAGEMENT ── */}
-            <UserManagementPanel users={users} setUsers={setUsers} notify={notify} waConfig={waConfig} setWaConfig={setWaConfig} />
+            <UserManagementPanel users={users} setUsers={setUsers} roles={roles} notify={notify} waConfig={waConfig} setWaConfig={setWaConfig} />
+            <RoleBuilderPanel roles={roles} setRoles={setRoles} users={users} notify={notify} />
 
             <div className="card" style={{ padding:24, marginBottom:20 }}>
               <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
@@ -1575,12 +1896,12 @@ function AgentApp({ user, perms, users, contacts, setContacts, onLogout, waConfi
 
         {/* User info + logout */}
         <div style={{ display:"flex", alignItems:"center", gap:12, padding:"14px 0" }}>
-          {(() => { const preset=ROLE_PRESETS[user.role]||ROLE_PRESETS.agent; return (
+          {(() => { const preset = perms || {}; const color = preset.color||"#6366f1"; const icon = preset.icon||"👤"; return (
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ width:32, height:32, borderRadius:9, background:`${preset.color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15 }}>{preset.icon}</div>
+              <div style={{ width:32, height:32, borderRadius:9, background:`${color}22`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15 }}>{icon}</div>
               <div>
                 <div style={{ fontSize:14, fontWeight:700 }}>{user.name}</div>
-                <div style={{ fontSize:11, color:preset.color }}>{user.jobTitle||preset.label}</div>
+                <div style={{ fontSize:11, color }}>{user.jobTitle||preset.label||user.role}</div>
               </div>
             </div>
           );})()}
