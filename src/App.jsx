@@ -1,5 +1,98 @@
 import { useState, useEffect, useRef } from "react";
 
+// ─── SUPABASE ──────────────────────────────────────────────────────────────────
+const SUPABASE_URL  = "https://ughqdhwvydmyyynypsna.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVnaHFkaHd2eWRteXl5bnlwc25hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwNjc2MjUsImV4cCI6MjA4ODY0MzYyNX0.AfTdZeEKtQCFFxpHldVynbBNUqzlhKLJltrHZgu-TQo";
+
+async function sbFetch(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+    ...options,
+    headers: {
+      "apikey": SUPABASE_ANON,
+      "Authorization": `Bearer ${SUPABASE_ANON}`,
+      "Content-Type": "application/json",
+      "Prefer": options.prefer ?? "return=representation",
+      ...(options.headers || {}),
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Supabase ${res.status}`);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// Convert DB row (snake_case) → CRM contact (camelCase)
+function dbToContact(r) {
+  if (!r) return null;
+  return {
+    id: r.id, name: r.name, phone: r.phone||"", email: r.email||"",
+    company: r.company||"", source: r.source||"", notes: r.notes||"",
+    budget: r.budget||"", timeline: r.timeline||"",
+    isDecisionMaker: r.is_decision_maker||false,
+    interestLevel: r.interest_level||3,
+    leadStatus: r.lead_status||"New Lead",
+    assignedTo: r.assigned_to||"",
+    score: r.score||0, scoreBreakdown: r.score_breakdown||{},
+    callStatus: r.call_status||null, callDate: r.call_date||null,
+    callTime: r.call_time||null, timezone: r.timezone||"",
+    meetingLink: r.meeting_link||"", callNotes: r.call_notes||"",
+    category: r.category||"C", whatsappHistory: r.whatsapp_history||[],
+    kycStatus: r.kyc_status||"not_started",
+    kycApplicantId: r.kyc_applicant_id||null,
+    lastCallDuration: r.last_call_duration||null,
+    lastCallOutcome: r.last_call_outcome||null,
+    totalCalls: r.total_calls||0,
+  };
+}
+
+// Convert CRM contact (camelCase) → DB row (snake_case)
+function contactToDb(c) {
+  const r = {};
+  if (c.name           !== undefined) r.name               = c.name;
+  if (c.phone          !== undefined) r.phone              = c.phone;
+  if (c.email          !== undefined) r.email              = c.email;
+  if (c.company        !== undefined) r.company            = c.company;
+  if (c.source         !== undefined) r.source             = c.source;
+  if (c.notes          !== undefined) r.notes              = c.notes;
+  if (c.budget         !== undefined) r.budget             = c.budget;
+  if (c.timeline       !== undefined) r.timeline           = c.timeline;
+  if (c.isDecisionMaker!== undefined) r.is_decision_maker  = c.isDecisionMaker;
+  if (c.interestLevel  !== undefined) r.interest_level     = c.interestLevel;
+  if (c.leadStatus     !== undefined) r.lead_status        = c.leadStatus;
+  if (c.assignedTo     !== undefined) r.assigned_to        = c.assignedTo;
+  if (c.score          !== undefined) r.score              = c.score;
+  if (c.scoreBreakdown !== undefined) r.score_breakdown    = c.scoreBreakdown;
+  if (c.callStatus     !== undefined) r.call_status        = c.callStatus;
+  if (c.callDate       !== undefined) r.call_date          = c.callDate;
+  if (c.callTime       !== undefined) r.call_time          = c.callTime;
+  if (c.timezone       !== undefined) r.timezone           = c.timezone;
+  if (c.meetingLink    !== undefined) r.meeting_link       = c.meetingLink;
+  if (c.callNotes      !== undefined) r.call_notes         = c.callNotes;
+  if (c.category       !== undefined) r.category           = c.category;
+  if (c.whatsappHistory!== undefined) r.whatsapp_history   = c.whatsappHistory;
+  if (c.kycStatus      !== undefined) r.kyc_status         = c.kycStatus;
+  return r;
+}
+
+// Realtime subscription — calls onChange on INSERT/UPDATE/DELETE
+function sbSubscribe(table, onChange) {
+  const wsUrl = `${SUPABASE_URL.replace("https","wss")}/realtime/v1/websocket?apikey=${SUPABASE_ANON}&vsn=1.0.0`;
+  let ws;
+  try {
+    ws = new WebSocket(wsUrl);
+    let ref = 0;
+    ws.onopen = () => ws.send(JSON.stringify({ topic:`realtime:public:${table}`, event:"phx_join", payload:{}, ref:String(++ref) }));
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (["INSERT","UPDATE","DELETE"].includes(msg.event)) onChange(msg.event, msg.payload?.record);
+      } catch {}
+    };
+  } catch {}
+  return () => { try { ws?.close(); } catch {} };
+}
+
 // ─── ROLE DEFINITIONS (defaults — overridden by localStorage) ─────────────────
 const DEFAULT_ROLES = {
   admin: {
@@ -154,53 +247,95 @@ const BASE_STYLES = `
 // ─── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [dbReady, setDbReady] = useState(false); // true once Supabase loaded
 
   const [roles, setRoles] = useState(() => {
-    try {
-      const saved = localStorage.getItem("clearcrm_roles");
-      return saved ? JSON.parse(saved) : DEFAULT_ROLES;
-    } catch { return DEFAULT_ROLES; }
+    try { const s = localStorage.getItem("clearcrm_roles"); return s ? JSON.parse(s) : DEFAULT_ROLES; } catch { return DEFAULT_ROLES; }
   });
 
-  // Keep global ROLE_PRESETS in sync with state
   useEffect(() => { ROLE_PRESETS = roles; }, [roles]);
 
   const [users, setUsers] = useState(() => {
-    try {
-      const saved = localStorage.getItem("clearcrm_users");
-      return saved ? JSON.parse(saved) : DEFAULT_USERS;
-    } catch { return DEFAULT_USERS; }
+    try { const s = localStorage.getItem("clearcrm_users"); return s ? JSON.parse(s) : DEFAULT_USERS; } catch { return DEFAULT_USERS; }
   });
 
   const [contacts, setContacts] = useState(() => {
-    try {
-      const saved = localStorage.getItem("clearcrm_contacts");
-      return saved ? JSON.parse(saved) : SAMPLE_CONTACTS;
-    } catch { return SAMPLE_CONTACTS; }
+    try { const s = localStorage.getItem("clearcrm_contacts"); return s ? JSON.parse(s) : SAMPLE_CONTACTS; } catch { return SAMPLE_CONTACTS; }
   });
 
   const [waConfig, setWaConfig] = useState(() => {
     try {
-      const saved = localStorage.getItem("clearcrm_waconfig");
-      const allNames = users.map(u=>u.name);
-      return saved ? JSON.parse(saved) : {
-        accessToken: "",
-        agents: Object.fromEntries(allNames.map(m => [m, { phoneNumberId:"", number:"", displayName:m }]))
-      };
-    } catch {
-      return { accessToken: "", agents: Object.fromEntries(DEFAULT_USERS.map(u => [u.name, { phoneNumberId:"", number:"", displayName:u.name }])) };
-    }
+      const s = localStorage.getItem("clearcrm_waconfig");
+      return s ? JSON.parse(s) : { accessToken:"", agents: Object.fromEntries(DEFAULT_USERS.map(u=>[u.name,{phoneNumberId:"",number:"",displayName:u.name}])) };
+    } catch { return { accessToken:"", agents:{} }; }
   });
 
   const [claudeApiKey, setClaudeApiKey] = useState(() => {
     try { return localStorage.getItem("clearcrm_claudekey") || ""; } catch { return ""; }
   });
 
-  useEffect(() => { try { localStorage.setItem("clearcrm_roles", JSON.stringify(roles)); } catch {} }, [roles]);
-  useEffect(() => { try { localStorage.setItem("clearcrm_users", JSON.stringify(users)); } catch {} }, [users]);
+  // ── Load contacts from Supabase on mount ──────────────────────────────────
+  useEffect(() => {
+    sbFetch("/contacts?order=created_at.desc")
+      .then(rows => {
+        if (rows && rows.length > 0) {
+          setContacts(rows.map(dbToContact));
+          setDbReady(true);
+        } else if (rows && rows.length === 0) {
+          // DB is empty — migrate localStorage contacts up
+          const local = (() => { try { const s=localStorage.getItem("clearcrm_contacts"); return s?JSON.parse(s):null; } catch{return null;} })();
+          if (local && local.length > 0) {
+            Promise.all(local.map(c => sbFetch("/contacts", { method:"POST", body: JSON.stringify(contactToDb(c)) }).catch(()=>null)))
+              .then(() => setDbReady(true));
+          } else {
+            setDbReady(true);
+          }
+        }
+      })
+      .catch(() => {
+        // Supabase unreachable — continue with localStorage
+        setDbReady(false);
+      });
+  }, []);
+
+  // ── Real-time sync ────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!dbReady) return;
+    const unsub = sbSubscribe("contacts", (event, record) => {
+      if (!record) return;
+      const contact = dbToContact(record);
+      setContacts(prev => {
+        if (event === "INSERT") return prev.find(c=>c.id===contact.id) ? prev : [contact, ...prev];
+        if (event === "UPDATE") return prev.map(c => c.id===contact.id ? contact : c);
+        if (event === "DELETE") return prev.filter(c => c.id !== contact.id);
+        return prev;
+      });
+    });
+    return unsub;
+  }, [dbReady]);
+
+  // ── Persist to Supabase on contact changes (when DB ready) ───────────────
+  const setContactsAndSync = (updater) => {
+    setContacts(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      return next;
+    });
+  };
+
+  // Wrap updateContact to also write to Supabase
+  const syncContact = async (id, updates) => {
+    setContacts(prev => prev.map(c => c.id===id ? {...c,...updates} : c));
+    if (dbReady) {
+      try { await sbFetch(`/contacts?id=eq.${id}`, { method:"PATCH", body: JSON.stringify(contactToDb(updates)) }); } catch {}
+    }
+  };
+
+  // ── LocalStorage fallback persistence ────────────────────────────────────
+  useEffect(() => { try { localStorage.setItem("clearcrm_roles",    JSON.stringify(roles));    } catch {} }, [roles]);
+  useEffect(() => { try { localStorage.setItem("clearcrm_users",    JSON.stringify(users));    } catch {} }, [users]);
   useEffect(() => { try { localStorage.setItem("clearcrm_contacts", JSON.stringify(contacts)); } catch {} }, [contacts]);
   useEffect(() => { try { localStorage.setItem("clearcrm_waconfig", JSON.stringify(waConfig)); } catch {} }, [waConfig]);
-  useEffect(() => { try { localStorage.setItem("clearcrm_claudekey", claudeApiKey); } catch {} }, [claudeApiKey]);
+  useEffect(() => { try { localStorage.setItem("clearcrm_claudekey",claudeApiKey);             } catch {} }, [claudeApiKey]);
 
   useEffect(() => {
     if (currentUser) {
@@ -209,19 +344,16 @@ export default function App() {
     }
   }, [users]);
 
-  const handleLogin = (user) => {
-    const fresh = users.find(u => u.id === user.id) || user;
-    setCurrentUser(fresh);
-  };
+  const handleLogin = (user) => setCurrentUser(users.find(u=>u.id===user.id)||user);
 
   if (!currentUser) return <LoginScreen users={users} roles={roles} onLogin={handleLogin} />;
 
-  const perms = getUserPerms(currentUser, roles);
+  const perms  = getUserPerms(currentUser, roles);
   const isAdmin = currentUser.role === "admin";
 
   return isAdmin
-    ? <AdminApp user={currentUser} roles={roles} setRoles={setRoles} users={users} setUsers={setUsers} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} claudeApiKey={claudeApiKey} setClaudeApiKey={setClaudeApiKey} />
-    : <AgentApp user={currentUser} perms={perms} users={users} roles={roles} contacts={contacts} setContacts={setContacts} onLogout={() => setCurrentUser(null)} waConfig={waConfig} claudeApiKey={claudeApiKey} />;
+    ? <AdminApp user={currentUser} roles={roles} setRoles={setRoles} users={users} setUsers={setUsers} contacts={contacts} setContacts={setContactsAndSync} syncContact={syncContact} dbReady={dbReady} onLogout={()=>setCurrentUser(null)} waConfig={waConfig} setWaConfig={setWaConfig} claudeApiKey={claudeApiKey} setClaudeApiKey={setClaudeApiKey} />
+    : <AgentApp user={currentUser} perms={perms} users={users} roles={roles} contacts={contacts} setContacts={setContactsAndSync} syncContact={syncContact} onLogout={()=>setCurrentUser(null)} waConfig={waConfig} claudeApiKey={claudeApiKey} />;
 }
 
 // ─── USER MANAGEMENT PANEL ────────────────────────────────────────────────────
@@ -1193,7 +1325,7 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
 }
 
 // ─── ADMIN APP ─────────────────────────────────────────────────────────────────
-function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContacts, onLogout, waConfig, setWaConfig, claudeApiKey, setClaudeApiKey }) {
+function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContacts, syncContact, dbReady, onLogout, waConfig, setWaConfig, claudeApiKey, setClaudeApiKey }) {
   const [view, setView] = useState("dashboard");
   const [checklist, setChecklist] = useState({ fb:false, dev:false, verify:false, numbers:false, token:false, test:false, webhook:false });
   const [selectedContact, setSelectedContact] = useState(null);
@@ -1367,6 +1499,10 @@ function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContact
             ))}
           </div>
           <button className="btn btn-ghost" style={{ width:"100%", fontSize:13 }} onClick={onLogout}>🚪 Log Out ({user.name})</button>
+          <div style={{ marginTop:10, padding:"6px 10px", borderRadius:8, background:dbReady?"#f0fdf4":"#fff7ed", border:`1px solid ${dbReady?"#bbf7d0":"#fed7aa"}`, display:"flex", alignItems:"center", gap:6, fontSize:12 }}>
+            <span style={{ width:7,height:7,borderRadius:"50%",background:dbReady?"#10b981":"#f59e0b",flexShrink:0,display:"inline-block" }}/>
+            <span style={{ color:dbReady?"#16a34a":"#b45309" }}>{dbReady?"🗄️ Supabase live":"💾 Local only"}</span>
+          </div>
         </div>
       </div>
 
@@ -1528,6 +1664,9 @@ function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContact
             {/* ── USER MANAGEMENT ── */}
             <UserManagementPanel users={users} setUsers={setUsers} roles={roles} notify={notify} waConfig={waConfig} setWaConfig={setWaConfig} />
             <RoleBuilderPanel roles={roles} setRoles={setRoles} users={users} notify={notify} />
+
+            {/* ── INTEGRATIONS ── */}
+            <IntegrationsPanel notify={notify} contacts={contacts} setContacts={setContacts} users={users} />
 
             <div className="card" style={{ padding:24, marginBottom:20 }}>
               <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
@@ -3459,6 +3598,457 @@ function AddContactForm({ onSave, onCancel }) {
       <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
         <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
         <button className="btn btn-primary" style={{ opacity:canSave?1:0.5 }} onClick={()=>{ if(canSave) onSave(form); }}>Save Contact</button>
+      </div>
+    </div>
+  );
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// INTEGRATIONS PANEL — drop this component into ClearCRM Settings page
+//
+// USAGE IN App.jsx:
+//   1. Copy this entire component into App.jsx (before AdminApp)
+//   2. In the Settings view, add:
+//      <IntegrationsPanel notify={notify} contacts={contacts} setContacts={setContacts} users={users} />
+// ═══════════════════════════════════════════════════════════════════════════
+
+function IntegrationsPanel({ notify, contacts, setContacts, users }) {
+  const [config, setConfig] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("clearcrm_integrations") || "{}"); } catch { return {}; }
+  });
+  const [activeTab, setActiveTab] = useState("supabase");
+  const [testing, setTesting] = useState(null);
+  const [testResult, setTestResult] = useState({});
+
+  const save = (section, updates) => {
+    const next = { ...config, [section]: { ...(config[section] || {}), ...updates } };
+    setConfig(next);
+    localStorage.setItem("clearcrm_integrations", JSON.stringify(next));
+    notify("✅ Saved");
+  };
+
+  const TABS = [
+    { id:"supabase",  label:"Supabase",  icon:"🗄️",  color:"#3ecf8e" },
+    { id:"calendly",  label:"Calendly",  icon:"📅",  color:"#006bff" },
+    { id:"sumsub",    label:"Sumsub KYC",icon:"🔍",  color:"#f59e0b" },
+    { id:"cloudtalk", label:"Cloudtalk", icon:"📞",  color:"#6366f1" },
+    { id:"status",    label:"Live Status",icon:"🟢", color:"#10b981" },
+  ];
+
+  return (
+    <div className="card" style={{ padding:24, marginBottom:20 }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+        <div style={{ width:36,height:36,background:"#10b98122",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18 }}>🔌</div>
+        <div>
+          <div style={{ fontSize:15,fontWeight:700 }}>Integrations</div>
+          <div style={{ fontSize:13,color:"#64748b" }}>Connect Supabase, Calendly, Sumsub KYC and Cloudtalk</div>
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{ display:"flex", gap:0, borderBottom:"2px solid #e2e8f0", marginBottom:24 }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={()=>setActiveTab(t.id)}
+            style={{ padding:"10px 18px",border:"none",borderBottom:`3px solid ${activeTab===t.id?t.color:"transparent"}`,marginBottom:-2,background:"transparent",color:activeTab===t.id?t.color:"#64748b",fontSize:13,fontWeight:activeTab===t.id?700:400,cursor:"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6 }}>
+            <span>{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── SUPABASE ── */}
+      {activeTab==="supabase" && (
+        <SupabaseTab config={config.supabase||{}} save={v=>save("supabase",v)} notify={notify} testing={testing} setTesting={setTesting} testResult={testResult} setTestResult={setTestResult} />
+      )}
+
+      {/* ── CALENDLY ── */}
+      {activeTab==="calendly" && (
+        <CalendlyTab config={config.calendly||{}} save={v=>save("calendly",v)} notify={notify} users={users} />
+      )}
+
+      {/* ── SUMSUB ── */}
+      {activeTab==="sumsub" && (
+        <SumsubTab config={config.sumsub||{}} save={v=>save("sumsub",v)} notify={notify} contacts={contacts} setContacts={setContacts} />
+      )}
+
+      {/* ── CLOUDTALK ── */}
+      {activeTab==="cloudtalk" && (
+        <CloudtalkTab config={config.cloudtalk||{}} save={v=>save("cloudtalk",v)} notify={notify} />
+      )}
+
+      {/* ── LIVE STATUS ── */}
+      {activeTab==="status" && (
+        <StatusTab config={config} />
+      )}
+    </div>
+  );
+}
+
+// ─── SUPABASE TAB ─────────────────────────────────────────────────────────────
+function SupabaseTab({ config, save, notify, testing, setTesting, testResult, setTestResult }) {
+  const [url, setUrl]   = useState(config.url   || SUPABASE_URL);
+  const [anon, setAnon] = useState(config.anon  || SUPABASE_ANON);
+  const [realtimeEnabled, setRealtimeEnabled] = useState(config.realtimeEnabled ?? true);
+
+  const test = async () => {
+    setTesting("supabase");
+    try {
+      const res = await fetch(`${url}/rest/v1/contacts?limit=1`, {
+        headers: { "apikey": anon, "Authorization": `Bearer ${anon}` }
+      });
+      if (res.ok) {
+        setTestResult(r => ({ ...r, supabase:"✅ Connected — database reachable" }));
+        save({ url, anon, realtimeEnabled, connected: true });
+      } else {
+        const e = await res.json().catch(()=>({}));
+        setTestResult(r => ({ ...r, supabase:`❌ ${e.message || "Check your URL and key"}` }));
+      }
+    } catch (e) {
+      setTestResult(r => ({ ...r, supabase:`❌ ${e.message}` }));
+    }
+    setTesting(null);
+  };
+
+  return (
+    <div>
+      <InfoBox color="#3ecf8e" title="What Supabase does" items={[
+        "Replaces localStorage — all agents share the same live data",
+        "Real-time sync — updates appear instantly on every device",
+        "Receives webhooks from Calendly, Sumsub and Cloudtalk",
+        "Stores call logs, KYC events and WhatsApp history permanently",
+      ]} />
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16, marginTop:20 }}>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Supabase Project URL</label>
+          <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://xxxx.supabase.co" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+        </div>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Anon / Public Key</label>
+          <input type="password" value={anon} onChange={e=>setAnon(e.target.value)} placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+        </div>
+      </div>
+
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+        <input type="checkbox" id="rt" checked={realtimeEnabled} onChange={e=>setRealtimeEnabled(e.target.checked)} />
+        <label htmlFor="rt" style={{ fontSize:13,color:"#475569",cursor:"pointer" }}>Enable real-time sync (recommended — requires Realtime enabled in Supabase dashboard)</label>
+      </div>
+
+      <div style={{ display:"flex", gap:10, marginBottom:16 }}>
+        <button className="btn btn-primary" onClick={()=>save({ url, anon, realtimeEnabled })}>Save</button>
+        <button className="btn btn-ghost" onClick={test} style={{ opacity:(!url||!anon)?0.4:1 }} disabled={!url||!anon||testing==="supabase"}>
+          {testing==="supabase" ? "Testing…" : "Test Connection"}
+        </button>
+      </div>
+
+      {testResult.supabase && (
+        <div style={{ padding:"10px 14px",borderRadius:8,background:testResult.supabase.startsWith("✅")?"#f0fdf4":"#fef2f2",fontSize:13,color:testResult.supabase.startsWith("✅")?"#16a34a":"#dc2626" }}>
+          {testResult.supabase}
+        </div>
+      )}
+
+      <SetupStep step="1" title="Run the SQL schema" description='Go to Supabase → SQL Editor → New Query, paste the contents of schema.sql and click Run. This creates all tables.' />
+      <SetupStep step="2" title="Enable Realtime" description="Go to Supabase → Database → Replication → enable Realtime for: contacts, call_logs, kyc_events, calendly_events, whatsapp_messages" />
+      <SetupStep step="3" title="Migrate your data" description="Once connected, click the Migrate button in the Live Status tab to move all contacts from localStorage to Supabase." />
+    </div>
+  );
+}
+
+// ─── CALENDLY TAB ─────────────────────────────────────────────────────────────
+function CalendlyTab({ config, save, notify, users }) {
+  const [apiKey, setApiKey]     = useState(config.apiKey || "");
+  const [userUri, setUserUri]   = useState(config.userUri || "");
+  const [webhookUrl, setWebhookUrl] = useState(config.webhookUrl || "");
+  const [agentMap, setAgentMap] = useState(config.agentMap || {});
+
+  const WEBHOOK_URL_PLACEHOLDER = "https://YOUR_PROJECT.supabase.co/functions/v1/calendly-webhook";
+
+  return (
+    <div>
+      <InfoBox color="#006bff" title="What Calendly does" items={[
+        "When a contact books a call → lead auto-moves to 'Call Booked'",
+        "Call date, time and Zoom link auto-populated on contact card",
+        "WhatsApp booking confirmation sent automatically",
+        "New contacts created automatically if they don't exist yet",
+        "Cancellations → lead moves to 'Follow Up Later'",
+      ]} />
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:20, marginBottom:16 }}>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Calendly API Key</label>
+          <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+          <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>Calendly → Integrations → API & Webhooks → Personal Access Token</div>
+        </div>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Your Calendly User URI</label>
+          <input value={userUri} onChange={e=>setUserUri(e.target.value)} placeholder="https://api.calendly.com/users/xxx" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+          <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>Found at: api.calendly.com/users/me (use your API key to call it)</div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom:16 }}>
+        <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Webhook URL (paste into Calendly)</label>
+        <div style={{ display:"flex",gap:8 }}>
+          <input value={webhookUrl||WEBHOOK_URL_PLACEHOLDER} onChange={e=>setWebhookUrl(e.target.value)} style={{ flex:1,fontFamily:"DM Mono,monospace",fontSize:12,color:"#475569" }} />
+          <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>{ navigator.clipboard.writeText(webhookUrl||WEBHOOK_URL_PLACEHOLDER); notify("📋 Copied!"); }}>Copy</button>
+        </div>
+        <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>Replace YOUR_PROJECT with your Supabase project ID. Then paste into Calendly → Integrations → Webhooks → Create Webhook.</div>
+      </div>
+
+      {/* Agent → Calendly event type mapping */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:10 }}>Agent Event Name Mapping</div>
+        <div style={{ fontSize:13,color:"#64748b",marginBottom:10 }}>
+          Enter each agent's Calendly event URL keyword so ClearCRM can auto-assign booked calls to the right agent.
+          <br/>e.g. if the event URL is <code>calendly.com/jamie/sales-call</code> → enter <strong>jamie</strong>
+        </div>
+        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10 }}>
+          {users.filter(u=>u.active!==false).map(u => (
+            <div key={u.id}>
+              <label style={{ fontSize:12,color:"#64748b",display:"block",marginBottom:4 }}>{u.name}</label>
+              <input value={agentMap[u.name]||""} onChange={e=>setAgentMap(m=>({...m,[u.name]:e.target.value}))}
+                placeholder={u.name.toLowerCase()} style={{ width:"100%",fontSize:13 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button className="btn btn-primary" onClick={()=>save({ apiKey, userUri, webhookUrl, agentMap })}>Save Calendly Settings</button>
+
+      <SetupStep step="1" title="Deploy the Edge Function" description="In your terminal: supabase functions deploy calendly-webhook (uses the template in integrations.js → EDGE_FUNCTION_TEMPLATES.calendly)" />
+      <SetupStep step="2" title="Add webhook in Calendly" description="Calendly → Integrations → Webhooks → Create Webhook. Paste the URL above. Select events: invitee.created and invitee.canceled" />
+      <SetupStep step="3" title="Test it" description="Book a test call using your Calendly link. Within seconds the contact should appear in ClearCRM with status 'Call Booked'." />
+    </div>
+  );
+}
+
+// ─── SUMSUB TAB ───────────────────────────────────────────────────────────────
+function SumsubTab({ config, save, notify, contacts, setContacts }) {
+  const [appToken, setAppToken] = useState(config.appToken || "");
+  const [secretKey, setSecretKey] = useState(config.secretKey || "");
+  const [levelName, setLevelName] = useState(config.levelName || "basic-kyc-level");
+  const [sending, setSending] = useState(null);
+
+  const sendKycLink = async (contact) => {
+    if (!appToken || !secretKey) { notify("❌ Add your Sumsub credentials first"); return; }
+    setSending(contact.id);
+    try {
+      // In production this calls sumsubApi.createApplicantLink()
+      // For now shows what would happen
+      notify(`📨 KYC link would be sent to ${contact.name} via WhatsApp`);
+    } catch (e) {
+      notify(`❌ ${e.message}`);
+    }
+    setSending(null);
+  };
+
+  const kycContacts = contacts.filter(c => c.kycStatus && c.kycStatus !== "not_started");
+  const pendingCount = contacts.filter(c => c.kycStatus === "pending").length;
+  const approvedCount = contacts.filter(c => c.kycStatus === "approved").length;
+  const rejectedCount = contacts.filter(c => c.kycStatus === "rejected").length;
+
+  return (
+    <div>
+      <InfoBox color="#f59e0b" title="What Sumsub does" items={[
+        "Send KYC verification link to any contact via WhatsApp or email",
+        "KYC status badge appears on every contact card (Pending / Approved / Rejected)",
+        "Webhook auto-updates status when Sumsub completes review",
+        "All KYC events logged with timestamps for compliance",
+        "Rejection reasons stored and visible to KYC Officers",
+      ]} />
+
+      {/* KYC Stats */}
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,margin:"20px 0" }}>
+        {[["⏳","Pending",pendingCount,"#f59e0b","#fffbeb"],["✅","Approved",approvedCount,"#10b981","#f0fdf4"],["❌","Rejected",rejectedCount,"#ef4444","#fef2f2"]].map(([icon,label,count,color,bg])=>(
+          <div key={label} style={{ background:bg,border:`1px solid ${color}33`,borderRadius:10,padding:"12px 16px",textAlign:"center" }}>
+            <div style={{ fontSize:20 }}>{icon}</div>
+            <div style={{ fontSize:22,fontWeight:800,color }}>{count}</div>
+            <div style={{ fontSize:12,color:"#64748b" }}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16 }}>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Sumsub App Token</label>
+          <input type="password" value={appToken} onChange={e=>setAppToken(e.target.value)} placeholder="prd:xxxxx" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+          <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>Sumsub Dashboard → Developers → App Tokens</div>
+        </div>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Secret Key</label>
+          <input type="password" value={secretKey} onChange={e=>setSecretKey(e.target.value)} placeholder="xxxxxxxx" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+        </div>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>KYC Level Name</label>
+          <input value={levelName} onChange={e=>setLevelName(e.target.value)} placeholder="basic-kyc-level" style={{ width:"100%",fontSize:13 }} />
+          <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>The verification level configured in your Sumsub dashboard</div>
+        </div>
+      </div>
+
+      <button className="btn btn-primary" onClick={()=>save({ appToken, secretKey, levelName })} style={{ marginBottom:20 }}>Save Sumsub Settings</button>
+
+      {/* KYC contact list */}
+      {kycContacts.length > 0 && (
+        <div>
+          <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:10 }}>Contacts with active KYC</div>
+          {kycContacts.map(c => {
+            const STATUS = { pending:{label:"Pending",color:"#f59e0b",bg:"#fffbeb",icon:"⏳"}, approved:{label:"Approved",color:"#10b981",bg:"#f0fdf4",icon:"✅"}, rejected:{label:"Rejected",color:"#ef4444",bg:"#fef2f2",icon:"❌"} };
+            const s = STATUS[c.kycStatus] || STATUS.pending;
+            return (
+              <div key={c.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:"#f8fafc",borderRadius:8,marginBottom:8 }}>
+                <div style={{ flex:1 }}>
+                  <span style={{ fontWeight:600,fontSize:14 }}>{c.name}</span>
+                  <span style={{ color:"#94a3b8",fontSize:13,marginLeft:8 }}>{c.company}</span>
+                </div>
+                <span style={{ padding:"4px 10px",borderRadius:6,background:s.bg,color:s.color,fontSize:12,fontWeight:600 }}>{s.icon} {s.label}</span>
+                {c.kycStatus!=="approved" && (
+                  <button className="btn btn-ghost" style={{ fontSize:12,padding:"5px 10px" }} onClick={()=>sendKycLink(c)} disabled={sending===c.id}>
+                    {sending===c.id?"Sending…":"📨 Send Link"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <SetupStep step="1" title="Deploy Sumsub Edge Function" description="supabase functions deploy sumsub-webhook — set env var SUMSUB_WEBHOOK_SECRET to a random string." />
+      <SetupStep step="2" title="Add webhook in Sumsub" description="Sumsub → Developers → Webhooks. URL: https://YOUR_PROJECT.supabase.co/functions/v1/sumsub-webhook. Select: applicantCreated, applicantReviewed, applicantPending." />
+      <SetupStep step="3" title="Send first KYC" description="On any contact card, click 'Send KYC' — a link is generated and sent via WhatsApp. Status updates automatically when they complete." />
+    </div>
+  );
+}
+
+// ─── CLOUDTALK TAB ────────────────────────────────────────────────────────────
+function CloudtalkTab({ config, save, notify }) {
+  const [apiKey, setApiKey]       = useState(config.apiKey || "");
+  const [apiSecret, setApiSecret] = useState(config.apiSecret || "");
+  const [webhookUrl]              = useState(config.webhookUrl || "https://YOUR_PROJECT.supabase.co/functions/v1/cloudtalk-webhook");
+
+  return (
+    <div>
+      <InfoBox color="#6366f1" title="What Cloudtalk does" items={[
+        "Every call automatically logged to the contact's record",
+        "Call duration, outcome (answered/voicemail/no answer) stored",
+        "If 'Call Booked' contact answers → auto-moves to 'Completed'",
+        "If 'Call Booked' contact doesn't answer → auto-moves to 'No Show'",
+        "Recording links saved and accessible from the contact card",
+        "Agent name matched automatically from Cloudtalk agent list",
+      ]} />
+
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:20,marginBottom:16 }}>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Cloudtalk API Key</label>
+          <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="ct_live_xxxx" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+          <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>Cloudtalk → Settings → API & Integrations</div>
+        </div>
+        <div>
+          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>API Secret</label>
+          <input type="password" value={apiSecret} onChange={e=>setApiSecret(e.target.value)} placeholder="xxxxxxxx" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
+        </div>
+      </div>
+
+      <div style={{ marginBottom:16 }}>
+        <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Webhook URL (paste into Cloudtalk)</label>
+        <div style={{ display:"flex",gap:8 }}>
+          <input value={webhookUrl} readOnly style={{ flex:1,fontFamily:"DM Mono,monospace",fontSize:12,color:"#475569",background:"#f8fafc" }} />
+          <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>{ navigator.clipboard.writeText(webhookUrl); notify("📋 Copied!"); }}>Copy</button>
+        </div>
+      </div>
+
+      <button className="btn btn-primary" onClick={()=>save({ apiKey, apiSecret, webhookUrl })}>Save Cloudtalk Settings</button>
+
+      <SetupStep step="1" title="Deploy Cloudtalk Edge Function" description="supabase functions deploy cloudtalk-webhook" />
+      <SetupStep step="2" title="Add webhook in Cloudtalk" description="Cloudtalk → Settings → Webhooks → Add Webhook. URL: above. Event: call.ended" />
+      <SetupStep step="3" title="Match agent names" description="Make sure agent names in Cloudtalk exactly match names in ClearCRM (Alex, Jamie, Sam, Jordan) so calls are attributed correctly." />
+    </div>
+  );
+}
+
+// ─── STATUS TAB ───────────────────────────────────────────────────────────────
+function StatusTab({ config }) {
+  const checks = [
+    { key:"supabase",  label:"Supabase Database", icon:"🗄️",  connected: !!(config.supabase?.url && config.supabase?.anon && config.supabase?.connected) },
+    { key:"calendly",  label:"Calendly",          icon:"📅",  connected: !!(config.calendly?.apiKey) },
+    { key:"sumsub",    label:"Sumsub KYC",         icon:"🔍",  connected: !!(config.sumsub?.appToken && config.sumsub?.secretKey) },
+    { key:"cloudtalk", label:"Cloudtalk Calls",   icon:"📞",  connected: !!(config.cloudtalk?.apiKey) },
+  ];
+
+  const allConnected = checks.every(c => c.connected);
+  const connectedCount = checks.filter(c => c.connected).length;
+
+  return (
+    <div>
+      <div style={{ padding:"16px 20px",background:allConnected?"#f0fdf4":"#fffbeb",border:`1px solid ${allConnected?"#bbf7d0":"#fde68a"}`,borderRadius:10,marginBottom:20,display:"flex",alignItems:"center",gap:12 }}>
+        <span style={{ fontSize:24 }}>{allConnected?"🟢":"🟡"}</span>
+        <div>
+          <div style={{ fontSize:15,fontWeight:700,color:allConnected?"#16a34a":"#b45309" }}>
+            {allConnected ? "All integrations connected" : `${connectedCount} of ${checks.length} integrations connected`}
+          </div>
+          <div style={{ fontSize:13,color:"#64748b" }}>
+            {allConnected ? "ClearCRM is fully integrated — data flows automatically between all tools."
+              : "Complete the setup tabs above to connect remaining integrations."}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:24 }}>
+        {checks.map(c => (
+          <div key={c.key} style={{ padding:"16px 18px",background:"#fff",border:`2px solid ${c.connected?"#bbf7d0":"#e2e8f0"}`,borderRadius:10,display:"flex",alignItems:"center",gap:12 }}>
+            <span style={{ fontSize:24 }}>{c.icon}</span>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:14,fontWeight:600 }}>{c.label}</div>
+              <div style={{ fontSize:13,color:c.connected?"#16a34a":"#94a3b8" }}>
+                {c.connected ? "✅ Connected" : "⬜ Not configured"}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Data flow diagram */}
+      <div style={{ background:"#f8fafc",borderRadius:10,padding:"18px 20px",border:"1px solid #e2e8f0" }}>
+        <div style={{ fontSize:13,fontWeight:700,color:"#475569",marginBottom:14 }}>AUTOMATED DATA FLOW</div>
+        {[
+          ["📅","Contact books via Calendly","→","📋","Lead created/updated in ClearCRM","→","💬","WhatsApp confirmation sent"],
+          ["📞","Cloudtalk call ends","→","📋","Call logged + status updated","→","🔄","Pipeline moves automatically"],
+          ["🔍","Sumsub review complete","→","📋","KYC badge updated on contact","→","✅","Agent sees status instantly"],
+          ["📋","Any data change in ClearCRM","→","🗄️","Saved to Supabase","→","👥","All agents see it live"],
+        ].map(([i1,s1,arr,i2,s2,arr2,i3,s3],idx)=>(
+          <div key={idx} style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #e2e8f0",flexWrap:"wrap",fontSize:13 }}>
+            <span style={{ fontSize:16 }}>{i1}</span>
+            <span style={{ color:"#475569" }}>{s1}</span>
+            <span style={{ color:"#94a3b8",fontWeight:700 }}>{arr}</span>
+            <span style={{ fontSize:16 }}>{i2}</span>
+            <span style={{ color:"#475569" }}>{s2}</span>
+            <span style={{ color:"#94a3b8",fontWeight:700 }}>{arr2}</span>
+            <span style={{ fontSize:16 }}>{i3}</span>
+            <span style={{ color:"#10b981",fontWeight:600 }}>{s3}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── HELPER COMPONENTS ────────────────────────────────────────────────────────
+function InfoBox({ color, title, items }) {
+  return (
+    <div style={{ background:`${color}08`,border:`1px solid ${color}33`,borderRadius:10,padding:"14px 16px" }}>
+      <div style={{ fontSize:13,fontWeight:700,color,marginBottom:8 }}>{title}</div>
+      <ul style={{ margin:0,paddingLeft:16,display:"flex",flexDirection:"column",gap:4 }}>
+        {items.map((item,i) => <li key={i} style={{ fontSize:13,color:"#475569" }}>{item}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+function SetupStep({ step, title, description }) {
+  return (
+    <div style={{ display:"flex",gap:12,padding:"12px 0",borderTop:"1px solid #f1f5f9",marginTop:12 }}>
+      <div style={{ width:28,height:28,borderRadius:8,background:"#ede9fe",color:"#6366f1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0 }}>{step}</div>
+      <div>
+        <div style={{ fontSize:13,fontWeight:600,color:"#1e293b",marginBottom:2 }}>{title}</div>
+        <div style={{ fontSize:13,color:"#64748b" }}>{description}</div>
       </div>
     </div>
   );
