@@ -3786,67 +3786,122 @@ function SupabaseTab({ config, save, notify, testing, setTesting, testResult, se
 // ─── CALENDLY TAB ─────────────────────────────────────────────────────────────
 function CalendlyTab({ config, save, notify, users }) {
   const [apiKey, setApiKey]     = useState(config.apiKey || "");
-  const [userUri, setUserUri]   = useState(config.userUri || "");
-  const [webhookUrl, setWebhookUrl] = useState(config.webhookUrl || "");
-  const [agentMap, setAgentMap] = useState(config.agentMap || {});
+  const [agentLinks, setAgentLinks] = useState(config.agentLinks || {});
 
-  const WEBHOOK_URL_PLACEHOLDER = "https://YOUR_PROJECT.supabase.co/functions/v1/calendly-webhook";
+  const WEBHOOK_URL = "https://ughqdhwvydmyyynypsna.supabase.co/functions/v1/calendly-webhook";
+
+  const activeUsers = users.filter(u => u.active !== false);
+
+  // Extract slug from full calendly URL or just return what they typed
+  const getSlug = (url) => {
+    if (!url) return "";
+    const m = url.match(/calendly\.com\/([^\/\s]+)/);
+    return m ? m[1] : url;
+  };
 
   return (
     <div>
-      <InfoBox color="#006bff" title="What Calendly does" items={[
-        "When a contact books a call → lead auto-moves to 'Call Booked'",
-        "Call date, time and Zoom link auto-populated on contact card",
-        "WhatsApp booking confirmation sent automatically",
+      <InfoBox color="#006bff" title="How Calendly works with ClearCRM" items={[
+        "Each agent shares their own Calendly link — one webhook handles ALL agents automatically",
+        "When any contact books → ClearCRM auto-updates status to 'Call Booked'",
+        "Call date, time and Zoom link are filled in on the contact card instantly",
         "New contacts created automatically if they don't exist yet",
-        "Cancellations → lead moves to 'Follow Up Later'",
+        "Cancellations → contact moves to 'Follow Up Later'",
       ]} />
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop:20, marginBottom:16 }}>
-        <div>
-          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Calendly API Key</label>
-          <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
-          <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>Calendly → Integrations → API & Webhooks → Personal Access Token</div>
+      {/* Step 1 — API Key */}
+      <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:16, marginTop:20, marginBottom:16 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+          <div style={{ width:26, height:26, borderRadius:"50%", background:"#006bff", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>1</div>
+          <div style={{ fontWeight:600, fontSize:14, color:"#1e293b" }}>Add your Calendly API Key</div>
         </div>
-        <div>
-          <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Your Calendly User URI</label>
-          <input value={userUri} onChange={e=>setUserUri(e.target.value)} placeholder="https://api.calendly.com/users/xxx" style={{ width:"100%",fontFamily:"DM Mono,monospace",fontSize:13 }} />
-          <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>Found at: api.calendly.com/users/me (use your API key to call it)</div>
+        <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)}
+          placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          style={{ width:"100%", fontFamily:"DM Mono,monospace", fontSize:13, marginBottom:6 }} />
+        <div style={{ fontSize:12, color:"#64748b" }}>
+          Get it at: <strong>calendly.com</strong> → Integrations & Apps → API & Webhooks → Personal Access Tokens → Create a token
         </div>
       </div>
 
-      <div style={{ marginBottom:16 }}>
-        <label style={{ fontSize:13,color:"#64748b",display:"block",marginBottom:5 }}>Webhook URL (paste into Calendly)</label>
-        <div style={{ display:"flex",gap:8 }}>
-          <input value={webhookUrl||WEBHOOK_URL_PLACEHOLDER} onChange={e=>setWebhookUrl(e.target.value)} style={{ flex:1,fontFamily:"DM Mono,monospace",fontSize:12,color:"#475569" }} />
-          <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={()=>{ navigator.clipboard.writeText(webhookUrl||WEBHOOK_URL_PLACEHOLDER); notify("📋 Copied!"); }}>Copy</button>
+      {/* Step 2 — Per-agent Calendly links */}
+      <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:16, marginBottom:16 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+          <div style={{ width:26, height:26, borderRadius:"50%", background:"#006bff", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>2</div>
+          <div style={{ fontWeight:600, fontSize:14, color:"#1e293b" }}>Enter each agent's Calendly booking link</div>
         </div>
-        <div style={{ fontSize:12,color:"#94a3b8",marginTop:4 }}>Replace YOUR_PROJECT with your Supabase project ID. Then paste into Calendly → Integrations → Webhooks → Create Webhook.</div>
-      </div>
-
-      {/* Agent → Calendly event type mapping */}
-      <div style={{ marginBottom:16 }}>
-        <div style={{ fontSize:13,fontWeight:600,color:"#475569",marginBottom:10 }}>Agent Event Name Mapping</div>
-        <div style={{ fontSize:13,color:"#64748b",marginBottom:10 }}>
-          Enter each agent's Calendly event URL keyword so ClearCRM can auto-assign booked calls to the right agent.
-          <br/>e.g. if the event URL is <code>calendly.com/jamie/sales-call</code> → enter <strong>jamie</strong>
+        <div style={{ fontSize:13, color:"#64748b", marginBottom:12 }}>
+          Each agent has their own Calendly link. Paste the full URL or just the username part (e.g. <code>paddyfarren</code> from <code>calendly.com/paddyfarren</code>).
+          ClearCRM uses this to assign bookings to the right agent automatically.
         </div>
-        <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10 }}>
-          {users.filter(u=>u.active!==false).map(u => (
-            <div key={u.id}>
-              <label style={{ fontSize:12,color:"#64748b",display:"block",marginBottom:4 }}>{u.name}</label>
-              <input value={agentMap[u.name]||""} onChange={e=>setAgentMap(m=>({...m,[u.name]:e.target.value}))}
-                placeholder={u.name.toLowerCase()} style={{ width:"100%",fontSize:13 }} />
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))", gap:12 }}>
+          {activeUsers.map(u => (
+            <div key={u.id} style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, padding:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <div style={{ width:28, height:28, borderRadius:"50%", background:"#6366f1", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700 }}>
+                  {u.name[0]}
+                </div>
+                <div style={{ fontWeight:600, fontSize:13, color:"#1e293b" }}>{u.name}</div>
+              </div>
+              <input
+                value={agentLinks[u.name] || ""}
+                onChange={e => setAgentLinks(m => ({ ...m, [u.name]: e.target.value }))}
+                placeholder={`calendly.com/${u.name.toLowerCase().replace(" ","")}`}
+                style={{ width:"100%", fontSize:12, fontFamily:"DM Mono,monospace" }}
+              />
+              {agentLinks[u.name] && (
+                <div style={{ fontSize:11, color:"#10b981", marginTop:4 }}>
+                  ✓ Slug: <strong>{getSlug(agentLinks[u.name])}</strong>
+                </div>
+              )}
             </div>
           ))}
         </div>
       </div>
 
-      <button className="btn btn-primary" onClick={()=>save({ apiKey, userUri, webhookUrl, agentMap })}>Save Calendly Settings</button>
+      {/* Step 3 — Webhook */}
+      <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:16, marginBottom:16 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+          <div style={{ width:26, height:26, borderRadius:"50%", background:"#006bff", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>3</div>
+          <div style={{ fontWeight:600, fontSize:14, color:"#1e293b" }}>Add ONE webhook in Calendly (covers all agents)</div>
+        </div>
+        <div style={{ fontSize:13, color:"#64748b", marginBottom:10 }}>
+          You only need <strong>one webhook</strong> — it automatically handles bookings from all agents' Calendly links.
+        </div>
+        <div style={{ background:"#fff", border:"1px solid #e2e8f0", borderRadius:8, padding:12, marginBottom:10 }}>
+          <div style={{ fontSize:12, color:"#64748b", marginBottom:6, fontWeight:600 }}>Your webhook URL:</div>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <code style={{ fontSize:12, color:"#1e293b", flex:1, wordBreak:"break-all" }}>{WEBHOOK_URL}</code>
+            <button className="btn btn-ghost" style={{ fontSize:12, flexShrink:0 }}
+              onClick={() => { navigator.clipboard.writeText(WEBHOOK_URL); notify("📋 Copied!"); }}>Copy</button>
+          </div>
+        </div>
+        <div style={{ fontSize:13, color:"#475569", lineHeight:1.7 }}>
+          <strong>How to add it in Calendly:</strong><br/>
+          1. Go to <strong>calendly.com</strong> → Integrations & Apps<br/>
+          2. Search for <strong>"API and Webhooks"</strong> → click it<br/>
+          3. Scroll to <strong>Webhook Subscriptions</strong> → <strong>New Webhook</strong><br/>
+          4. Paste the URL above<br/>
+          5. Tick <strong>invitee.created</strong> and <strong>invitee.canceled</strong><br/>
+          6. Click <strong>Save</strong><br/>
+          <br/>
+          <div style={{ background:"#fef3c7", border:"1px solid #fbbf24", borderRadius:6, padding:10, fontSize:12, color:"#92400e" }}>
+            ⚠️ <strong>Webhooks require Calendly Standard plan or higher.</strong> If you're on the free plan, upgrade at calendly.com/upgrade or use Zapier as an alternative.
+          </div>
+        </div>
+      </div>
 
-      <SetupStep step="1" title="Deploy the Edge Function" description="In your terminal: supabase functions deploy calendly-webhook (uses the template in integrations.js → EDGE_FUNCTION_TEMPLATES.calendly)" />
-      <SetupStep step="2" title="Add webhook in Calendly" description="Calendly → Integrations → Webhooks → Create Webhook. Paste the URL above. Select events: invitee.created and invitee.canceled" />
-      <SetupStep step="3" title="Test it" description="Book a test call using your Calendly link. Within seconds the contact should appear in ClearCRM with status 'Call Booked'." />
+      {/* Step 4 — Test */}
+      <div style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:10, padding:16, marginBottom:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+          <div style={{ width:26, height:26, borderRadius:"50%", background:"#10b981", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>4</div>
+          <div style={{ fontWeight:600, fontSize:14, color:"#1e293b" }}>Test it</div>
+        </div>
+        <div style={{ fontSize:13, color:"#64748b" }}>
+          Share any agent's Calendly link and book a test meeting. Within seconds the contact should appear in ClearCRM with status <strong>"Call Booked"</strong> and be assigned to the correct agent.
+        </div>
+      </div>
+
+      <button className="btn btn-primary" onClick={() => save({ apiKey, agentLinks })}>Save Calendly Settings</button>
     </div>
   );
 }
