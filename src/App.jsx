@@ -1085,27 +1085,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
                   <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f1f5f9", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#1e293b", fontWeight: 500 }}>{v||"—"}</span></div>
                 ))}
                 {/* Allocation display */}
-                <div style={{ marginTop:10, padding:"12px 14px", background: c.hasInvested ? "#f0fdf4" : "#f8fafc", border:`1px solid ${c.hasInvested?"#bbf7d0":"#e2e8f0"}`, borderRadius:8 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <span style={{ fontSize:13, fontWeight:600, color: c.hasInvested ? "#16a34a" : "#64748b" }}>
-                      {c.hasInvested ? "💰 Allocated" : "💰 No Allocation Yet"}
-                    </span>
-                    {c.hasInvested && c.allocationAmount && (
-                      <span style={{ fontSize:16, fontWeight:800, color:"#16a34a", fontFamily:"DM Mono,monospace" }}>
-                        €{Number(c.allocationAmount).toLocaleString()}
-                      </span>
-                    )}
-                  </div>
-                  {c.hasInvested && c.allocationDate && (
-                    <div style={{ fontSize:12, color:"#64748b", marginTop:4 }}>Date: {c.allocationDate}</div>
-                  )}
-                  {!c.hasInvested && (
-                    <button className="btn btn-ghost" style={{ fontSize:12, marginTop:8, width:"100%", borderColor:"#6366f1", color:"#6366f1" }}
-                      onClick={() => { updateContact(c.id, { hasInvested: true, allocationDate: new Date().toISOString().split("T")[0] }); }}>
-                      + Mark as Allocated
-                    </button>
-                  )}
-                </div>
+                <AllocationPanel c={c} updateContact={updateContact} />
                 <div style={{ marginTop: 14 }}>
                   <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>UPDATE STATUS</div>
                   <select value={c.leadStatus} onChange={e => updateContact(c.id, { leadStatus: e.target.value })} style={{ width: "100%" }}>{WORKFLOW_STAGES.map(s => <option key={s}>{s}</option>)}</select>
@@ -1386,6 +1366,96 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── ALLOCATION PANEL ─────────────────────────────────────────────────────────
+function AllocationPanel({ c, updateContact }) {
+  const [entering, setEntering] = useState(false);
+  const [amount, setAmount] = useState(c.allocationAmount || "");
+  const [date, setDate] = useState(c.allocationDate || new Date().toISOString().split("T")[0]);
+
+  const save = () => {
+    if (!amount || isNaN(Number(amount))) { alert("Please enter a valid amount"); return; }
+    updateContact(c.id, { hasInvested: true, allocationAmount: Number(amount), allocationDate: date });
+    setEntering(false);
+  };
+
+  const remove = () => {
+    if (!window.confirm("Remove this allocation?")) return;
+    updateContact(c.id, { hasInvested: false, allocationAmount: "", allocationDate: "" });
+  };
+
+  if (c.hasInvested) {
+    return (
+      <div style={{ marginTop:10, padding:"14px 16px", background:"#f0fdf4", border:"2px solid #86efac", borderRadius:10 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, color:"#16a34a", fontWeight:700, marginBottom:2 }}>💰 ALLOCATED</div>
+            <div style={{ fontSize:22, fontWeight:800, color:"#15803d", fontFamily:"DM Mono,monospace" }}>
+              €{Number(c.allocationAmount||0).toLocaleString()}
+            </div>
+            {c.allocationDate && <div style={{ fontSize:12, color:"#64748b", marginTop:2 }}>Date: {c.allocationDate}</div>}
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            <button className="btn btn-ghost" style={{ fontSize:11, padding:"4px 10px" }}
+              onClick={() => { setAmount(c.allocationAmount||""); setDate(c.allocationDate||""); setEntering(true); }}>✏️ Edit</button>
+            <button className="btn btn-ghost" style={{ fontSize:11, padding:"4px 10px", color:"#ef4444" }} onClick={remove}>✕ Remove</button>
+          </div>
+        </div>
+        {entering && (
+          <div style={{ marginTop:12, paddingTop:12, borderTop:"1px solid #bbf7d0" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+              <div>
+                <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Amount (€)</label>
+                <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
+                  placeholder="e.g. 250000" style={{ width:"100%", fontSize:14, fontWeight:700 }} autoFocus />
+              </div>
+              <div>
+                <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Date</label>
+                <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{ width:"100%", fontSize:13 }} />
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button className="btn btn-primary" style={{ flex:1, fontSize:13 }} onClick={save}>💾 Save</button>
+              <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={()=>setEntering(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (entering) {
+    return (
+      <div style={{ marginTop:10, padding:"14px 16px", background:"#f0f9ff", border:"2px solid #6366f1", borderRadius:10 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:"#6366f1", marginBottom:12 }}>💰 Record Allocation</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
+          <div>
+            <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Amount Invested (€)</label>
+            <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
+              placeholder="e.g. 250000" style={{ width:"100%", fontSize:16, fontWeight:700 }} autoFocus />
+          </div>
+          <div>
+            <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Date</label>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{ width:"100%", fontSize:13 }} />
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button className="btn btn-primary" style={{ flex:1, fontSize:13 }} onClick={save}>✅ Confirm Allocation</button>
+          <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={()=>setEntering(false)}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop:10 }}>
+      <button className="btn btn-ghost" style={{ width:"100%", fontSize:13, padding:"10px", borderColor:"#6366f1", color:"#6366f1", borderStyle:"dashed" }}
+        onClick={() => setEntering(true)}>
+        💰 Record Allocation
+      </button>
     </div>
   );
 }
