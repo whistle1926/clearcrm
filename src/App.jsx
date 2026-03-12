@@ -911,7 +911,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState("");
   const [editMode, setEditMode] = useState(false);
-  const [editForm, setEditForm] = useState({ name:c.name, phone:c.phone, email:c.email, company:c.company, source:c.source, budget:c.budget, timeline:c.timeline, isDecisionMaker:c.isDecisionMaker, interestLevel:c.interestLevel, assignedTo:c.assignedTo });
+  const [editForm, setEditForm] = useState({ name:c.name, phone:c.phone, email:c.email, company:c.company, source:c.source, budget:c.budget, timeline:c.timeline, isDecisionMaker:c.isDecisionMaker, interestLevel:c.interestLevel, assignedTo:c.assignedTo, hasInvested:c.hasInvested||false, allocationAmount:c.allocationAmount||"", allocationDate:c.allocationDate||"" });
   const { notify, NotificationEl } = useNotify();
 
   const saveEdit = () => {
@@ -965,7 +965,7 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
           <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
             <span className="pill" style={{ background: categoryColor(c.category)+"22", color: categoryColor(c.category), fontSize: 13, padding: "4px 12px" }}>Cat {c.category}</span>
             <span style={{ fontSize: 24, fontWeight: 800, color: scoreColor(c.score), fontFamily: "DM Mono,monospace" }}>{c.score}</span>
-            {!editMode && <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={() => { setEditMode(true); setEditForm({ name:c.name, phone:c.phone, email:c.email, company:c.company, source:c.source, budget:c.budget, timeline:c.timeline, isDecisionMaker:c.isDecisionMaker, interestLevel:c.interestLevel, assignedTo:c.assignedTo }); }}>✏️ Edit</button>}
+            {!editMode && <button className="btn btn-ghost" style={{ fontSize:13 }} onClick={() => { setEditMode(true); setEditForm({ name:c.name, phone:c.phone, email:c.email, company:c.company, source:c.source, budget:c.budget, timeline:c.timeline, isDecisionMaker:c.isDecisionMaker, interestLevel:c.interestLevel, assignedTo:c.assignedTo, hasInvested:c.hasInvested||false, allocationAmount:c.allocationAmount||"", allocationDate:c.allocationDate||"" }); }}>✏️ Edit</button>}
             {editMode && <><button className="btn btn-ghost" style={{ fontSize:13 }} onClick={() => setEditMode(false)}>Cancel</button><button className="btn btn-primary" style={{ fontSize:13 }} onClick={saveEdit}>💾 Save</button></>}
             <button className="btn btn-primary" onClick={() => { setShowWAModal(c); setWaMessage(""); }}>💬 Send WhatsApp</button>
           </div>
@@ -1054,6 +1054,26 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
                   <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4, fontWeight:500 }}>Lead Status</label>
                   <select value={c.leadStatus} onChange={e => updateContact(c.id, { leadStatus: e.target.value })} style={{ width:"100%" }}>{WORKFLOW_STAGES.map(s=><option key={s}>{s}</option>)}</select>
                 </div>
+                <div style={{ borderTop:"2px solid #6366f1", paddingTop:12, marginTop:4 }}>
+                  <div style={{ fontSize:12, color:"#6366f1", fontWeight:700, marginBottom:8 }}>💰 ALLOCATION</div>
+                  <label style={{ display:"flex", alignItems:"center", gap:10, fontSize:14, cursor:"pointer", marginBottom:10 }}>
+                    <input type="checkbox" checked={editForm.hasInvested||false} onChange={e=>setF("hasInvested",e.target.checked)} style={{ width:16, height:16, accentColor:"#6366f1" }} />
+                    <span style={{ color:"#475569" }}>Has invested / allocated</span>
+                  </label>
+                  {editForm.hasInvested && (
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      <div>
+                        <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Amount (€)</label>
+                        <input type="number" value={editForm.allocationAmount||""} onChange={e=>setF("allocationAmount",e.target.value)}
+                          placeholder="e.g. 250000" style={{ width:"100%", fontSize:13 }} />
+                      </div>
+                      <div>
+                        <label style={{ fontSize:12, color:"#64748b", display:"block", marginBottom:4 }}>Date</label>
+                        <input type="date" value={editForm.allocationDate||""} onChange={e=>setF("allocationDate",e.target.value)} style={{ width:"100%", fontSize:13 }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div style={{ display:"flex", gap:8, marginTop:4 }}>
                   <button className="btn btn-ghost" style={{ flex:1, fontSize:13 }} onClick={()=>setEditMode(false)}>Cancel</button>
                   <button className="btn btn-primary" style={{ flex:1, fontSize:13 }} onClick={saveEdit}>💾 Save Changes</button>
@@ -1064,6 +1084,28 @@ function ContactDetail({ c, contacts, updateContact, sendWhatsApp, onBack, isAdm
                 {[["Budget",c.budget],["Timeline",c.timeline],["Decision Maker",c.isDecisionMaker?"✅ Yes":"❌ No"],["Interest","⭐".repeat(c.interestLevel)]].map(([k,v]) => (
                   <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #f1f5f9", fontSize: 15 }}><span style={{ color: "#64748b" }}>{k}</span><span style={{ color: "#1e293b", fontWeight: 500 }}>{v||"—"}</span></div>
                 ))}
+                {/* Allocation display */}
+                <div style={{ marginTop:10, padding:"12px 14px", background: c.hasInvested ? "#f0fdf4" : "#f8fafc", border:`1px solid ${c.hasInvested?"#bbf7d0":"#e2e8f0"}`, borderRadius:8 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <span style={{ fontSize:13, fontWeight:600, color: c.hasInvested ? "#16a34a" : "#64748b" }}>
+                      {c.hasInvested ? "💰 Allocated" : "💰 No Allocation Yet"}
+                    </span>
+                    {c.hasInvested && c.allocationAmount && (
+                      <span style={{ fontSize:16, fontWeight:800, color:"#16a34a", fontFamily:"DM Mono,monospace" }}>
+                        €{Number(c.allocationAmount).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  {c.hasInvested && c.allocationDate && (
+                    <div style={{ fontSize:12, color:"#64748b", marginTop:4 }}>Date: {c.allocationDate}</div>
+                  )}
+                  {!c.hasInvested && (
+                    <button className="btn btn-ghost" style={{ fontSize:12, marginTop:8, width:"100%", borderColor:"#6366f1", color:"#6366f1" }}
+                      onClick={() => { updateContact(c.id, { hasInvested: true, allocationDate: new Date().toISOString().split("T")[0] }); }}>
+                      + Mark as Allocated
+                    </button>
+                  )}
+                </div>
                 <div style={{ marginTop: 14 }}>
                   <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>UPDATE STATUS</div>
                   <select value={c.leadStatus} onChange={e => updateContact(c.id, { leadStatus: e.target.value })} style={{ width: "100%" }}>{WORKFLOW_STAGES.map(s => <option key={s}>{s}</option>)}</select>
@@ -1641,11 +1683,14 @@ function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContact
           const agentList = [...new Set(contacts.map(c=>c.assignedTo).filter(Boolean))];
           const closedToday = contacts.filter(c => c.leadStatus === "Completed" && c.callDate === today);
           const bookedToday = contacts.filter(c => c.callDate === today && c.callStatus === "booked");
+          const allocatedToday = contacts.filter(c => c.hasInvested && c.allocationDate === today);
+          const allocatedTodayTotal = allocatedToday.reduce((s,c) => s + (Number(c.allocationAmount)||0), 0);
+          const totalAllocated = contacts.filter(c => c.hasInvested).reduce((s,c) => s + (Number(c.allocationAmount)||0), 0);
           const totalPipeline = contacts.reduce((s,c) => {
             const bMap = {"Under 10k":5000,"10k-50k":30000,"50k-100k":75000,"100k-500k":300000,"500k+":750000};
             return s + (bMap[c.budget]||0);
           }, 0);
-          const fmt = (n) => n>=1000000?"$"+(n/1000000).toFixed(1)+"M":n>=1000?"$"+(n/1000).toFixed(0)+"K":"$"+n;
+          const fmt = (n) => n>=1000000?"€"+(n/1000000).toFixed(1)+"M":n>=1000?"€"+(n/1000).toFixed(0)+"K":"€"+n;
 
           const agentStats = agentList.map(agent => {
             const ac = contacts.filter(c => c.assignedTo === agent);
@@ -1658,9 +1703,12 @@ function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContact
               return s + (bMap[c.budget]||0);
             }, 0);
             const conv = ac.length > 0 ? Math.round((closed.length/ac.length)*100) : 0;
+            const allocated = ac.filter(c => c.hasInvested);
+            const allocatedTodayAgent = ac.filter(c => c.hasInvested && c.allocationDate === today);
+            const allocTotal = allocated.reduce((s,c) => s + (Number(c.allocationAmount)||0), 0);
             const colors = ["#6366f1","#10b981","#f59e0b","#3b82f6","#ec4899","#14b8a6"];
             const ci = agentList.indexOf(agent) % colors.length;
-            return { agent, ac, closed, closedTodayA, booked, noShow, pipeline, conv, color: colors[ci] };
+            return { agent, ac, closed, closedTodayA, booked, noShow, pipeline, conv, allocated, allocatedTodayAgent, allocTotal, color: colors[ci] };
           }).sort((a,b) => b.pipeline - a.pipeline);
 
           return (
@@ -1681,18 +1729,19 @@ function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContact
             {/* Top KPI strip */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:12, marginBottom:24 }}>
               {[
-                { l:"Total Leads",    v:contacts.length,                                              i:"👥", c:"#6366f1" },
-                { l:"Closed Today",   v:closedToday.length,                                           i:"✅", c:"#10b981" },
-                { l:"Booked Today",   v:bookedToday.length,                                           i:"📞", c:"#3b82f6" },
-                { l:"Hot Leads (A)",  v:contacts.filter(c=>c.category==="A").length,                  i:"🔥", c:"#f59e0b" },
-                { l:"No Shows",       v:noShows.length,                                               i:"⚠️", c:"#f97316" },
-                { l:"Est. Pipeline",  v:fmt(totalPipeline),                                           i:"💰", c:"#10b981", big:true },
+                { l:"Total Leads",        v:contacts.length,                                           i:"👥", c:"#6366f1" },
+                { l:"Closed Today",       v:closedToday.length,                                        i:"✅", c:"#10b981" },
+                { l:"Booked Today",       v:bookedToday.length,                                        i:"📞", c:"#3b82f6" },
+                { l:"Allocated Today",    v:allocatedToday.length > 0 ? fmt(allocatedTodayTotal) : "—", i:"💰", c:"#10b981", big:true, sub: allocatedToday.length > 0 ? `${allocatedToday.length} investor${allocatedToday.length>1?"s":""}` : "none today" },
+                { l:"Total Raised",       v:totalAllocated > 0 ? fmt(totalAllocated) : "—",            i:"🏦", c:"#6366f1", big:true },
+                { l:"No Shows",           v:noShows.length,                                            i:"⚠️", c:"#f97316" },
               ].map(s => (
                 <div key={s.l} className="stat-card" style={{ padding:"16px 18px" }}>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
                     <div>
-                      <div style={{ fontSize: s.big?20:28, fontWeight:800, color:s.c, fontFamily:"DM Mono,monospace", lineHeight:1.1 }}>{s.v}</div>
+                      <div style={{ fontSize: s.big?18:28, fontWeight:800, color:s.c, fontFamily:"DM Mono,monospace", lineHeight:1.1 }}>{s.v}</div>
                       <div style={{ fontSize:12, color:"#64748b", marginTop:4 }}>{s.l}</div>
+                      {s.sub && <div style={{ fontSize:11, color:s.c, marginTop:2, fontWeight:600 }}>{s.sub}</div>}
                     </div>
                     <span style={{ fontSize:20 }}>{s.i}</span>
                   </div>
@@ -1732,12 +1781,29 @@ function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContact
                       <span style={{ fontSize:11, padding:"3px 8px", background:"#dcfce7", color:"#16a34a", borderRadius:6, fontWeight:600 }}>✅ {s.closed.length} closed</span>
                       {s.closedTodayA.length > 0 && <span style={{ fontSize:11, padding:"3px 8px", background:"#fef9c3", color:"#ca8a04", borderRadius:6, fontWeight:600 }}>⭐ {s.closedTodayA.length} today</span>}
                       <span style={{ fontSize:11, padding:"3px 8px", background:"#dbeafe", color:"#2563eb", borderRadius:6, fontWeight:600 }}>📞 {s.booked.length} booked</span>
+                      {s.allocTotal > 0 && <span style={{ fontSize:11, padding:"3px 8px", background:"#f0fdf4", color:"#16a34a", borderRadius:6, fontWeight:600 }}>💰 {fmt(s.allocTotal)}</span>}
+                      {s.allocatedTodayAgent.length > 0 && <span style={{ fontSize:11, padding:"3px 8px", background:"#fef9c3", color:"#ca8a04", borderRadius:6, fontWeight:700 }}>🎉 {s.allocatedTodayAgent.length} today</span>}
                       {s.noShow.length > 0 && <span style={{ fontSize:11, padding:"3px 8px", background:"#fff7ed", color:"#f97316", borderRadius:6, fontWeight:600 }}>⚠️ {s.noShow.length} no-show</span>}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
+
+            {/* Allocated today banner — shows if any allocations today */}
+            {allocatedToday.length > 0 && (
+              <div style={{ background:"linear-gradient(135deg,#f0fdf4,#dcfce7)", border:"2px solid #86efac", borderRadius:12, padding:"16px 20px", marginBottom:20, display:"flex", alignItems:"center", gap:16 }}>
+                <span style={{ fontSize:28 }}>🎉</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:16, fontWeight:800, color:"#16a34a" }}>
+                    {fmt(allocatedTodayTotal)} allocated today!
+                  </div>
+                  <div style={{ fontSize:13, color:"#15803d", marginTop:2 }}>
+                    {allocatedToday.map(c => `${c.name} — €${Number(c.allocationAmount).toLocaleString()} (${c.assignedTo})`).join(" · ")}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Bottom 3-column grid */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:20 }}>
