@@ -1348,6 +1348,108 @@ function WAModal({ contact, waMessage, setWaMessage, onSend, onClose }) {
   );
 }
 
+// ─── LEAD SCORING RULES EDITOR ────────────────────────────────────────────────
+const DEFAULT_SCORING_RULES = [
+  { id:1, label:"Budget 500k+",       points:25,  color:"#10b981" },
+  { id:2, label:"Decision Maker",     points:15,  color:"#6366f1" },
+  { id:3, label:"Timeline < 1mo",     points:25,  color:"#10b981" },
+  { id:4, label:"High Interest (5★)", points:20,  color:"#6366f1" },
+  { id:5, label:"WA Engagement",      points:15,  color:"#3b82f6" },
+  { id:6, label:"No Response",        points:-10, color:"#ef4444" },
+  { id:7, label:"Low Budget (<10k)",  points:5,   color:"#94a3b8" },
+  { id:8, label:"No Show",            points:-13, color:"#f97316" },
+];
+
+function LeadScoringRulesEditor({ notify }) {
+  const stored = JSON.parse(localStorage.getItem("clearcrm_scoring_rules") || "null");
+  const [rules, setRules] = useState(stored || DEFAULT_SCORING_RULES);
+  const [editing, setEditing] = useState(null);
+  const [editLabel, setEditLabel] = useState("");
+  const [editPoints, setEditPoints] = useState(0);
+
+  const save = (updated) => {
+    localStorage.setItem("clearcrm_scoring_rules", JSON.stringify(updated));
+    setRules(updated);
+  };
+
+  const startEdit = (rule) => {
+    setEditing(rule.id);
+    setEditLabel(rule.label);
+    setEditPoints(rule.points);
+  };
+
+  const commitEdit = () => {
+    const pts = Number(editPoints);
+    const col = pts < 0 ? "#ef4444" : pts >= 20 ? "#10b981" : pts >= 10 ? "#6366f1" : "#3b82f6";
+    save(rules.map(r => r.id === editing ? { ...r, label: editLabel, points: pts, color: col } : r));
+    setEditing(null);
+    notify("✅ Scoring rule updated!");
+  };
+
+  const deleteRule = (id) => {
+    if (!window.confirm("Delete this rule?")) return;
+    save(rules.filter(r => r.id !== id));
+    notify("🗑️ Rule deleted");
+  };
+
+  const addRule = () => {
+    const newRule = { id: Date.now(), label: "New Rule", points: 10, color: "#6366f1" };
+    const updated = [...rules, newRule];
+    save(updated);
+    startEdit(newRule);
+  };
+
+  const reset = () => {
+    if (!window.confirm("Reset to default scoring rules?")) return;
+    save(DEFAULT_SCORING_RULES);
+    notify("↩️ Reset to defaults");
+  };
+
+  return (
+    <div className="card" style={{ padding:24 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+        <div style={{ fontSize:15, fontWeight:700 }}>Lead Scoring Rules</div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={reset}>↩️ Reset defaults</button>
+          <button className="btn btn-primary" style={{ fontSize:12 }} onClick={addRule}>+ Add Rule</button>
+        </div>
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+        {rules.map(rule => (
+          <div key={rule.id}>
+            {editing === rule.id ? (
+              <div style={{ padding:"10px 14px", background:"#f0f9ff", border:"2px solid #6366f1", borderRadius:8 }}>
+                <input value={editLabel} onChange={e => setEditLabel(e.target.value)}
+                  style={{ width:"100%", fontSize:13, marginBottom:6, fontWeight:600 }}
+                  placeholder="Rule name" autoFocus />
+                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  <input type="number" value={editPoints} onChange={e => setEditPoints(e.target.value)}
+                    style={{ width:70, fontSize:13, fontFamily:"DM Mono,monospace", textAlign:"center" }}
+                    placeholder="Points" />
+                  <span style={{ fontSize:12, color:"#64748b", flex:1 }}>points (negative = penalty)</span>
+                  <button className="btn btn-primary" style={{ fontSize:12, padding:"4px 12px" }} onClick={commitEdit}>Save</button>
+                  <button className="btn btn-ghost" style={{ fontSize:12, padding:"4px 10px" }} onClick={() => setEditing(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, fontSize:14, gap:8 }}>
+                <span style={{ color:"#475569", flex:1 }}>{rule.label}</span>
+                <span style={{ color:rule.color, fontWeight:700, fontFamily:"DM Mono,monospace", minWidth:36, textAlign:"right" }}>
+                  {rule.points > 0 ? `+${rule.points}` : rule.points}
+                </span>
+                <div style={{ display:"flex", gap:4, marginLeft:6 }}>
+                  <button className="btn btn-ghost" style={{ fontSize:11, padding:"2px 8px" }} onClick={() => startEdit(rule)}>✏️</button>
+                  <button className="btn btn-ghost" style={{ fontSize:11, padding:"2px 8px", color:"#ef4444" }} onClick={() => deleteRule(rule.id)}>🗑</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── ADMIN APP ─────────────────────────────────────────────────────────────────
 function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContacts, syncContact, dbReady, onLogout, waConfig, setWaConfig, claudeApiKey, setClaudeApiKey }) {
   const [view, setView] = useState("dashboard");
@@ -1871,18 +1973,8 @@ function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContact
               </div>
             </div>
 
-            {/* Scoring rules */}
-            <div className="card" style={{ padding:24 }}>
-              <div style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>Lead Scoring Rules</div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-                {[["Budget 500k+","+25","#10b981"],["Decision Maker","+15","#6366f1"],["Timeline < 1mo","+25","#10b981"],["High Interest (5★)","+20","#6366f1"],["WA Engagement","+15","#3b82f6"],["No Response","-10","#ef4444"],["Low Budget (<10k)","+5","#94a3b8"],["No Show","-13","#f97316"]].map(([k,v,c]) => (
-                  <div key={k} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:8, fontSize:14 }}>
-                    <span style={{ color:"#475569" }}>{k}</span>
-                    <span style={{ color:c, fontWeight:700, fontFamily:"DM Mono,monospace" }}>{v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Scoring rules — editable */}
+            <LeadScoringRulesEditor notify={notify} />
 
             {/* Data management */}
             <div className="card" style={{ padding:24 }}>
