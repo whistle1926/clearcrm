@@ -1636,59 +1636,169 @@ function AdminApp({ user, roles, setRoles, users, setUsers, contacts, setContact
       <div style={{ flex:1, overflow:"auto" }}>
 
         {/* DASHBOARD */}
-        {view==="dashboard" && (
+        {view==="dashboard" && (() => {
+          const today = new Date().toISOString().split("T")[0];
+          const agentList = [...new Set(contacts.map(c=>c.assignedTo).filter(Boolean))];
+          const closedToday = contacts.filter(c => c.leadStatus === "Completed" && c.callDate === today);
+          const bookedToday = contacts.filter(c => c.callDate === today && c.callStatus === "booked");
+          const totalPipeline = contacts.reduce((s,c) => {
+            const bMap = {"Under 10k":5000,"10k-50k":30000,"50k-100k":75000,"100k-500k":300000,"500k+":750000};
+            return s + (bMap[c.budget]||0);
+          }, 0);
+          const fmt = (n) => n>=1000000?"$"+(n/1000000).toFixed(1)+"M":n>=1000?"$"+(n/1000).toFixed(0)+"K":"$"+n;
+
+          const agentStats = agentList.map(agent => {
+            const ac = contacts.filter(c => c.assignedTo === agent);
+            const closed = ac.filter(c => c.leadStatus === "Completed");
+            const closedTodayA = ac.filter(c => c.leadStatus === "Completed" && c.callDate === today);
+            const booked = ac.filter(c => c.callStatus === "booked");
+            const noShow = ac.filter(c => c.callStatus === "no-show");
+            const pipeline = ac.reduce((s,c) => {
+              const bMap = {"Under 10k":5000,"10k-50k":30000,"50k-100k":75000,"100k-500k":300000,"500k+":750000};
+              return s + (bMap[c.budget]||0);
+            }, 0);
+            const conv = ac.length > 0 ? Math.round((closed.length/ac.length)*100) : 0;
+            const colors = ["#6366f1","#10b981","#f59e0b","#3b82f6","#ec4899","#14b8a6"];
+            const ci = agentList.indexOf(agent) % colors.length;
+            return { agent, ac, closed, closedTodayA, booked, noShow, pipeline, conv, color: colors[ci] };
+          }).sort((a,b) => b.pipeline - a.pipeline);
+
+          return (
           <div style={{ padding:28 }} className="fade-in">
-            <div style={{ marginBottom:24 }}>
-              <h1 style={{ fontSize:22, fontWeight:700 }}>Good morning, {user.name} 👋</h1>
-              <p style={{ color:"#64748b", fontSize:14, marginTop:4 }}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</p>
+            {/* Header */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+              <div>
+                <h1 style={{ fontSize:22, fontWeight:700 }}>Good {new Date().getHours()<12?"morning":new Date().getHours()<17?"afternoon":"evening"}, {user.name} 👋</h1>
+                <p style={{ color:"#64748b", fontSize:14, marginTop:4 }}>{new Date().toLocaleDateString("en-IE",{weekday:"long",month:"long",day:"numeric"})} · Live overview</p>
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                {["Today","Week","Month","All Time"].map(t => (
+                  <button key={t} className="btn btn-ghost" style={{ fontSize:12, padding:"6px 14px" }}>{t}</button>
+                ))}
+              </div>
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16, marginBottom:24 }}>
-              {[{l:"Total Contacts",v:contacts.length,i:"👥",c:"#6366f1"},{l:"Today's Calls",v:todaysCalls.length,i:"📞",c:"#10b981"},{l:"Hot Leads (A)",v:contacts.filter(c=>c.category==="A").length,i:"🔥",c:"#f59e0b"},{l:"No Shows",v:noShows.length,i:"⚠️",c:"#f97316"}].map(s => (
-                <div key={s.l} className="stat-card"><div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}><div><div style={{ fontSize:32, fontWeight:700, color:s.c }}>{s.v}</div><div style={{ fontSize:14, color:"#64748b", marginTop:2 }}>{s.l}</div></div><span style={{ fontSize:26 }}>{s.i}</span></div></div>
+
+            {/* Top KPI strip */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:12, marginBottom:24 }}>
+              {[
+                { l:"Total Leads",    v:contacts.length,                                              i:"👥", c:"#6366f1" },
+                { l:"Closed Today",   v:closedToday.length,                                           i:"✅", c:"#10b981" },
+                { l:"Booked Today",   v:bookedToday.length,                                           i:"📞", c:"#3b82f6" },
+                { l:"Hot Leads (A)",  v:contacts.filter(c=>c.category==="A").length,                  i:"🔥", c:"#f59e0b" },
+                { l:"No Shows",       v:noShows.length,                                               i:"⚠️", c:"#f97316" },
+                { l:"Est. Pipeline",  v:fmt(totalPipeline),                                           i:"💰", c:"#10b981", big:true },
+              ].map(s => (
+                <div key={s.l} className="stat-card" style={{ padding:"16px 18px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                    <div>
+                      <div style={{ fontSize: s.big?20:28, fontWeight:800, color:s.c, fontFamily:"DM Mono,monospace", lineHeight:1.1 }}>{s.v}</div>
+                      <div style={{ fontSize:12, color:"#64748b", marginTop:4 }}>{s.l}</div>
+                    </div>
+                    <span style={{ fontSize:20 }}>{s.i}</span>
+                  </div>
+                </div>
               ))}
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+
+            {/* Agent leaderboard */}
+            <div className="card" style={{ padding:20, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+                <div style={{ fontSize:15, fontWeight:700 }}>🏆 Agent Leaderboard — Today</div>
+                <div style={{ fontSize:12, color:"#64748b" }}>Sorted by pipeline value</div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))", gap:12 }}>
+                {agentStats.map((s, i) => (
+                  <div key={s.agent} style={{ background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:12, padding:16 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+                      <div style={{ fontSize:18 }}>{i===0?"🥇":i===1?"🥈":i===2?"🥉":"🎖️"}</div>
+                      <div style={{ width:36, height:36, borderRadius:"50%", background:s.color, color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:700, fontSize:14 }}>
+                        {s.agent[0]}
+                      </div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:700, fontSize:14 }}>{s.agent}</div>
+                        <div style={{ fontSize:12, color:"#64748b" }}>{s.ac.length} leads · {s.conv}% conv</div>
+                      </div>
+                      <div style={{ textAlign:"right" }}>
+                        <div style={{ fontWeight:800, fontSize:16, color:"#10b981", fontFamily:"DM Mono,monospace" }}>{fmt(s.pipeline)}</div>
+                        <div style={{ fontSize:11, color:"#64748b" }}>pipeline</div>
+                      </div>
+                    </div>
+                    {/* Progress bar */}
+                    <div style={{ height:6, background:"#e2e8f0", borderRadius:3, marginBottom:10, overflow:"hidden" }}>
+                      <div style={{ height:"100%", background:s.color, borderRadius:3, width:`${Math.min(100,(s.pipeline/Math.max(...agentStats.map(a=>a.pipeline),1))*100)}%`, transition:"width 0.5s" }} />
+                    </div>
+                    {/* Stat pills */}
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                      <span style={{ fontSize:11, padding:"3px 8px", background:"#dcfce7", color:"#16a34a", borderRadius:6, fontWeight:600 }}>✅ {s.closed.length} closed</span>
+                      {s.closedTodayA.length > 0 && <span style={{ fontSize:11, padding:"3px 8px", background:"#fef9c3", color:"#ca8a04", borderRadius:6, fontWeight:600 }}>⭐ {s.closedTodayA.length} today</span>}
+                      <span style={{ fontSize:11, padding:"3px 8px", background:"#dbeafe", color:"#2563eb", borderRadius:6, fontWeight:600 }}>📞 {s.booked.length} booked</span>
+                      {s.noShow.length > 0 && <span style={{ fontSize:11, padding:"3px 8px", background:"#fff7ed", color:"#f97316", borderRadius:6, fontWeight:600 }}>⚠️ {s.noShow.length} no-show</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Bottom 3-column grid */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:20 }}>
+              {/* Today's calls */}
               <div className="card" style={{ padding:20 }}>
                 <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>📞 TODAY'S CALLS</div>
-                {todaysCalls.length===0 ? <div style={{ color:"#64748b", fontSize:14 }}>No calls today.</div> : todaysCalls.map(c => (
-                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
-                    <div style={{ width:40, height:40, background:"#e0e7ff", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14, color:"#6366f1", fontWeight:700 }}>{c.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
-                    <div style={{ flex:1 }}><div style={{ fontSize:15, fontWeight:600 }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.callTime} {c.timezone} · {c.company}</div></div>
-                    <span className="pill" style={{ background:"#dcfce7", color:"#10b981" }}>Booked</span>
-                  </div>
-                ))}
+                {todaysCalls.length===0
+                  ? <div style={{ color:"#94a3b8", fontSize:13, textAlign:"center", padding:"20px 0" }}>No calls scheduled today</div>
+                  : todaysCalls.map(c => (
+                    <div key={c.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
+                      <div style={{ width:36, height:36, background:"#e0e7ff", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, color:"#6366f1", fontWeight:700, flexShrink:0 }}>{c.name.split(" ").map(n=>n[0]).join("").slice(0,2)}</div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:14, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                        <div style={{ fontSize:12, color:"#64748b" }}>{c.callTime} · {c.assignedTo}</div>
+                      </div>
+                      <span className="pill" style={{ background:"#dcfce7", color:"#10b981", fontSize:11 }}>Booked</span>
+                    </div>
+                  ))
+                }
               </div>
+
+              {/* Closed today */}
               <div className="card" style={{ padding:20 }}>
-                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>🔥 TOP PRIORITY LEADS</div>
-                {topLeads.map(c => (
-                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
-                    <div style={{ width:36, height:36, background:"linear-gradient(135deg,#ede9fe,#e0e7ff)", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, color:"#6366f1" }}>{c.score}</div>
-                    <div style={{ flex:1 }}><div style={{ fontSize:15, fontWeight:600 }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.company} · {c.budget}</div></div>
-                    <span className="pill" style={{ background:categoryColor(c.category)+"22", color:categoryColor(c.category) }}>Cat {c.category}</span>
-                  </div>
-                ))}
+                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>✅ CLOSED TODAY</div>
+                {closedToday.length===0
+                  ? <div style={{ color:"#94a3b8", fontSize:13, textAlign:"center", padding:"20px 0" }}>No closings yet today — let's go! 💪</div>
+                  : closedToday.map(c => (
+                    <div key={c.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0", borderBottom:"1px solid #f1f5f9", cursor:"pointer" }} onClick={() => goToContact(c)}>
+                      <div style={{ width:36, height:36, background:"#dcfce7", borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>✅</div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:14, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                        <div style={{ fontSize:12, color:"#64748b" }}>{c.company} · {c.assignedTo}</div>
+                      </div>
+                      <div style={{ fontSize:13, fontWeight:700, color:"#10b981", fontFamily:"DM Mono,monospace", flexShrink:0 }}>
+                        {{"Under 10k":"<10K","10k-50k":"50K","50k-100k":"100K","100k-500k":"500K","500k+":"500K+"}[c.budget]||""}
+                      </div>
+                    </div>
+                  ))
+                }
               </div>
+
+              {/* No-show follow-ups */}
               <div className="card" style={{ padding:20 }}>
                 <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>⚠️ NO-SHOW FOLLOW-UPS</div>
-                {noShows.length===0 ? <div style={{ color:"#64748b", fontSize:14 }}>All clear!</div> : noShows.map(c => (
-                  <div key={c.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 0", borderBottom:"1px solid #f1f5f9" }}>
-                    <div style={{ flex:1 }}><div style={{ fontSize:15, fontWeight:600 }}>{c.name}</div><div style={{ fontSize:13, color:"#64748b" }}>{c.callDate} · {c.assignedTo}</div></div>
-                    <button className="btn btn-ghost" style={{ fontSize:13, padding:"6px 12px" }} onClick={() => { setShowWAModal(c); setWaMessage(fillTemplate(WA_TEMPLATES.no_show,c)); }}>Send WA</button>
-                  </div>
-                ))}
-              </div>
-              <div className="card" style={{ padding:20 }}>
-                <div style={{ fontSize:14, fontWeight:600, marginBottom:14, color:"#64748b" }}>💬 RECENT WHATSAPP</div>
-                {recentWA.length===0 ? <div style={{ color:"#64748b", fontSize:14 }}>No messages yet.</div> : recentWA.map(w => (
-                  <div key={w.id+w.contactId} style={{ padding:"8px 0", borderBottom:"1px solid #f1f5f9" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between" }}><span style={{ fontSize:14, fontWeight:600, color:"#64748b" }}>{w.contactName}</span><span className="pill" style={{ background:w.status==="read"?"#dcfce7":w.status==="delivered"?"#dbeafe":"#f1f5f9", color:w.status==="read"?"#16a34a":w.status==="delivered"?"#2563eb":"#94a3b8" }}>{w.status}</span></div>
-                    <div style={{ fontSize:13, color:"#64748b", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{w.msg}</div>
-                  </div>
-                ))}
+                {noShows.length===0
+                  ? <div style={{ color:"#94a3b8", fontSize:13, textAlign:"center", padding:"20px 0" }}>All clear! 🎉</div>
+                  : noShows.map(c => (
+                    <div key={c.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 0", borderBottom:"1px solid #f1f5f9" }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:14, fontWeight:600 }}>{c.name}</div>
+                        <div style={{ fontSize:12, color:"#64748b" }}>{c.callDate} · {c.assignedTo}</div>
+                      </div>
+                      <button className="btn btn-ghost" style={{ fontSize:12, padding:"5px 10px", flexShrink:0 }} onClick={() => { setShowWAModal(c); setWaMessage(fillTemplate(WA_TEMPLATES.no_show,c)); }}>💬 WA</button>
+                    </div>
+                  ))
+                }
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* CONTACTS */}
         {view==="contacts" && !selectedContact && (
